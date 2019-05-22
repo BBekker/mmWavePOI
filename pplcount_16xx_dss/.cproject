@@ -71,6 +71,7 @@
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.GCC.1151022683" name="Enable support for GCC extensions (DEPRECATED) (--gcc)" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.GCC" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.ABI.1124971498" name="Application binary interface (coffabi not supported) (--abi)" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.ABI" useByScannerDiscovery="false" value="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.ABI.eabi" valueType="enumerated"/>
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.OBJ_EXTENSION.1594711701" name="Extension for object files (default is .obj) (--obj_extension, -eo)" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.OBJ_EXTENSION" useByScannerDiscovery="false" value=".oe674" valueType="string"/>
+								<option id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.CHECK_MISRA.768375045" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compilerID.CHECK_MISRA" value="&quot;14.1&quot;" valueType="string"/>
 								<inputType id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compiler.inputType__C_SRCS.1446217833" name="C Sources" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compiler.inputType__C_SRCS"/>
 								<inputType id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compiler.inputType__CPP_SRCS.1937145115" name="C++ Sources" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compiler.inputType__CPP_SRCS"/>
 								<inputType id="com.ti.ccstudio.buildDefinitions.C6000_8.3.compiler.inputType__ASM_SRCS.2135725875" name="Assembly Sources" superClass="com.ti.ccstudio.buildDefinitions.C6000_8.3.compiler.inputType__ASM_SRCS"/>
@@ -147,6 +148,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -297,6 +301,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -307,4 +314,5 @@
 		<project id="pplcount_16xx_dss.com.ti.ccstudio.buildDefinitions.C6000.ProjectType.131440160" name="C6000" projectType="com.ti.ccstudio.buildDefinitions.C6000.ProjectType"/>
 	</storageModule>
 	<storageModule moduleId="scannerConfiguration"/>
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 </cproject>

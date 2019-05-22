@@ -299,5 +299,107 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_run(
     return (errorCode);
 }
 
+RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_doppler(
+                            IN  void * handle,
+                            IN  RADARDEMO_aoAEstCaponBF_input * input,
+                            OUT RADARDEMO_aoAEstCaponBF_output   * estOutput)
 
+{
+    uint32_t     i, rnOffset;
+    RADARDEMO_aoaEstCaponBF_handle *aoaEstBFInst;
+    cplx16_t     * inputSignal;
+    RADARDEMO_aoaEstCaponBF_errorCode errorCode = RADARDEMO_AOACAPONBF_NO_ERROR;
+
+    aoaEstBFInst    =   (RADARDEMO_aoaEstCaponBF_handle *) handle;
+
+    if ( input == NULL)
+        errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
+    else
+    {
+        inputSignal     =   input->inputAntSamples;
+        if ( inputSignal == NULL)
+            errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
+    }
+    if (  estOutput == NULL)
+        errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
+    else
+    {
+        if ( estOutput->rangeAzimuthHeatMap == NULL)
+            errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
+    }
+    if (  aoaEstBFInst->scratchPad == NULL)
+        errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
+    if ( aoaEstBFInst->steeringVec == NULL)
+        errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
+    if (errorCode > RADARDEMO_AOACAPONBF_NO_ERROR)
+        return (errorCode);
+
+    rnOffset    =   (aoaEstBFInst->nRxAnt * (1 + aoaEstBFInst->nRxAnt)) >> 1;
+
+    float * dopplerFFTInput;
+    int32_t * localScratch, scratchOffset;
+    float * dopplerFFTOutput;
+    unsigned char *brev = NULL;
+    int32_t rad2D;
+    float max;
+    int32_t index;
+    __float2_t f2temp;
+    float ftemp;
+
+    scratchOffset       =   0;
+    dopplerFFTInput     =   (float *)&aoaEstBFInst->scratchPad[scratchOffset];
+    scratchOffset       +=  2 * input->nChirps;
+    localScratch        =   (int32_t *)&aoaEstBFInst->scratchPad[scratchOffset];
+    dopplerFFTOutput    =   (float *)&aoaEstBFInst->scratchPad[scratchOffset];
+
+    RADARDEMO_aoaEstCaponBF_dopperEstInput(
+            (uint8_t) (input->fallBackToConvBFFlag ^ 1),
+            (int32_t) aoaEstBFInst->nRxAnt,
+            (int32_t) input->nChirps,
+            (cplx16_t *) input->inputAntSamples,
+            (cplxf_t *) &aoaEstBFInst->steeringVec[input->azimuthIndx * (aoaEstBFInst->nRxAnt - 1)],
+            (cplxf_t  *) &aoaEstBFInst->invRnMatrices[input->rangeIndx * rnOffset],
+            (int32_t *) localScratch,
+            (float) input->bwDemon,
+            (float *) dopplerFFTInput
+        );
+
+    //WTF does this doooooo
+    i  = 30 - _norm(aoaEstBFInst->dopplerFFTSize);
+    if ((i & 1) == 0)
+        rad2D = 4;
+    else
+        rad2D = 2;
+
+    //This does the actual fft???
+    DSPF_sp_fftSPxSP (
+            aoaEstBFInst->dopplerFFTSize,
+            dopplerFFTInput,
+            (float *)aoaEstBFInst->twiddle,
+            dopplerFFTOutput,
+            brev,
+            rad2D,
+            0,
+            aoaEstBFInst->dopplerFFTSize);
+
+    //Peak finding?
+    max     = 0.f;
+    index   =   0;
+    for (i = 0; i < aoaEstBFInst->dopplerFFTSize; i++)
+    {
+        f2temp  =   _amem8_f2(&dopplerFFTOutput[2 * i]);
+        f2temp  =   _dmpysp(f2temp,f2temp);
+        ftemp   =   _hif2(f2temp) + _lof2(f2temp);
+        if (ftemp > max)
+        {
+            max     =   ftemp;
+            index   =   i;
+        }
+    }
+
+    estOutput->dopplerIdx   =   index;
+    estOutput->angleEst     =   -aoaEstBFInst->estAngleRange + input->azimuthIndx * aoaEstBFInst->estAngleResolution;
+
+    return (errorCode);
+}
 

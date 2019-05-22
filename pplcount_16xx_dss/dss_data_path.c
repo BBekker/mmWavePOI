@@ -1238,33 +1238,24 @@ void 	MmwDemo_initConfigStruct(MmwDemo_Cfg  *demoCfg, radarProcessConfig_t    *r
 
     /* Range window parameters. */
 	radarProcConfig->rangeWinSize     = 16;
-	if(0)
-	{
-		int32_t i;
-		for (i = 0; i < radarProcConfig->rangeWinSize; i++)
-		{
-			radarProcConfig->rangeWindow[i]  = 1.f;
-		}
-	}
-	else
-	{
-		radarProcConfig->rangeWindow[0]  = 0.0800f;
-		radarProcConfig->rangeWindow[1]  = 0.0894f;
-		radarProcConfig->rangeWindow[2]  = 0.1173f;
-		radarProcConfig->rangeWindow[3]  = 0.1624f;
-		radarProcConfig->rangeWindow[4]  = 0.2231f;
-		radarProcConfig->rangeWindow[5]  = 0.2967f;
-		radarProcConfig->rangeWindow[6]  = 0.3802f;
-		radarProcConfig->rangeWindow[7]  = 0.4703f;
-		radarProcConfig->rangeWindow[8]  = 0.5633f;
-		radarProcConfig->rangeWindow[9]  = 0.6553f;
-		radarProcConfig->rangeWindow[10] = 0.7426f;
-		radarProcConfig->rangeWindow[11] = 0.8216f;
-		radarProcConfig->rangeWindow[12] = 0.8890f;
-		radarProcConfig->rangeWindow[13] = 0.9422f;
-		radarProcConfig->rangeWindow[14] = 0.9789f;
-		radarProcConfig->rangeWindow[15] = 0.9976f;
-	}
+
+    radarProcConfig->rangeWindow[0]  = 0.0800f;
+    radarProcConfig->rangeWindow[1]  = 0.0894f;
+    radarProcConfig->rangeWindow[2]  = 0.1173f;
+    radarProcConfig->rangeWindow[3]  = 0.1624f;
+    radarProcConfig->rangeWindow[4]  = 0.2231f;
+    radarProcConfig->rangeWindow[5]  = 0.2967f;
+    radarProcConfig->rangeWindow[6]  = 0.3802f;
+    radarProcConfig->rangeWindow[7]  = 0.4703f;
+    radarProcConfig->rangeWindow[8]  = 0.5633f;
+    radarProcConfig->rangeWindow[9]  = 0.6553f;
+    radarProcConfig->rangeWindow[10] = 0.7426f;
+    radarProcConfig->rangeWindow[11] = 0.8216f;
+    radarProcConfig->rangeWindow[12] = 0.8890f;
+    radarProcConfig->rangeWindow[13] = 0.9422f;
+    radarProcConfig->rangeWindow[14] = 0.9789f;
+    radarProcConfig->rangeWindow[15] = 0.9976f;
+
     radarProcConfig->maxNumDetObj			= (uint8_t)MAX_RESOLVED_OBJECTS_PER_FRAME;
 }
 
