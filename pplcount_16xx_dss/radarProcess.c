@@ -356,17 +356,6 @@ uint8_t radarRangeAzimuthProcessRun(void *handle, uint32_t frameNum, int32_t ran
 {
     radarProcessInstance_t *processInst = (radarProcessInstance_t *)handle;
 	
-#if 0
-    if((frameNum % 10) == 0) {
-		processInst->aoaInput->clutterRemovalFlag = 0;
-        processInst->aoaInput->fallBackToConvBFFlag = 1;
-	}
-	else {
-        processInst->aoaInput->clutterRemovalFlag = 1;
-        processInst->aoaInput->fallBackToConvBFFlag = 0;
-	}
-#endif
-
 	processInst->aoaInput->rangeIndx = rangeIdx; 
 	processInst->aoaInput->inputAntSamples =  pDataIn;
 	processInst->aoaOutput->rangeAzimuthHeatMap = pDataOut;

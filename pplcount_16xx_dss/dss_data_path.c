@@ -814,11 +814,13 @@ void MmwDemo_interFrameProcessing(MmwDemo_DSS_DataPathObj *obj)
 
     for (rangeIdx = 1; rangeIdx < obj->numRangeBins; rangeIdx++)
     {
+        //AOA processing
     	radarRangeAzimuthProcessRun(obj->radarProcessHandle, obj->frameCount, rangeIdx, (cplx16_t *) &(obj->fftOut1D[rangeIdx * obj->numVirtRxAntennas * obj->numChirpsPerFrame]), obj->rangeAsimuthProcOut[PING]);
     	copyTranspose((uint32_t *)obj->rangeAsimuthProcOut[PING], (uint32_t *)&(obj->radarProcConfig.heatMapMem[rangeIdx]), obj->numAzimuthBins, 0, obj->numRangeBins, 1);
     }
     obj->cycleLog.rangeAzimuthProcCycles = Cycleprofiler_getTimeStamp() - startTime;
 
+    //CFAR dectection + doppler estimation
     radarFrameProcessRun(obj->radarProcessHandle, (void *) &(obj->outputDataToArm->outputToTracker));
 
     obj->cycleLog.cfarProcCycles = obj->radarProcConfig.benchmarkPtr->buffer[obj->radarProcConfig.benchmarkPtr->bufferIdx].cfarDetectionCycles;
@@ -881,7 +883,7 @@ void MmwDemo_interFrameProcessing(MmwDemo_DSS_DataPathObj *obj)
 		//Copy output from Cache to mem
         EDMAutil_triggerType3 (
             obj->edmaHandle[EDMA_INSTANCE_A],
-            (uint8_t *) NULL, //src is NULL wtf
+            (uint8_t *) NULL, //src is NULL, so it reuses the previous src
             (uint8_t *)(&obj->fftOut1D[baseIdx + antIndx * obj->numChirpsPerFrame + obj->dopplerBinCount]),
             (uint8_t) isPong(antIndx) ? MMW_EDMA_CH_1D_OUT_PONG : MMW_EDMA_CH_1D_OUT_PING,
             (uint8_t) MMW_EDMA_TRIGGER_ENABLE);

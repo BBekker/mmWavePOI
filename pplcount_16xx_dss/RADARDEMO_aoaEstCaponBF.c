@@ -260,12 +260,14 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_run(
 				(float *) dopplerFFTInput
 			);
 
+		//WTF does this doooooo
 		i  = 30 - _norm(aoaEstBFInst->dopplerFFTSize);
 		if ((i & 1) == 0)
 			rad2D = 4;
 		else
 			rad2D = 2;
 
+		//This does the actual fft???
 		DSPF_sp_fftSPxSP (
 				aoaEstBFInst->dopplerFFTSize,
 				dopplerFFTInput,
@@ -276,6 +278,7 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_run(
 				0,
 				aoaEstBFInst->dopplerFFTSize);
 
+		//Peak finding?
 		max		= 0.f;
 		index	=	0;
 		for (i = 0; i < aoaEstBFInst->dopplerFFTSize; i++)
@@ -295,4 +298,6 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_run(
 	}
     return (errorCode);
 }
+
+
 
