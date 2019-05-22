@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>pplcount_16xx_dss</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name>
+			<triggers>full,incremental,</triggers>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>org.eclipse.rtsc.xdctools.buildDefinitions.XDC.xdcNature</nature>
+		<nature>com.ti.ccstudio.core.ccsNature</nature>
+		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
+	</natures>
+	<variableList>
+		<variable>
+			<name>TI_PPLCOUNT_GTRACK_BASE</name>
+			<value>$%7BCOM_TI_MMWAVE_INDUSTRIAL_TOOLBOX_INSTALL_DIR%7D/labs/lab0011-pplcount/lab0011_pplcount_pjt/radarDemo/chains/RadarReceiverPeopleCounting/mmw_PCDemo/gtrack</value>
+		</variable>
+		<variable>
+			<name>TI_PPLCOUNT_RADARDEMO_BASE</name>
+			<value>$%7BCOM_TI_MMWAVE_INDUSTRIAL_TOOLBOX_INSTALL_DIR%7D/labs/lab0011-pplcount/lab0011_pplcount_pjt/radarDemo</value>
+		</variable>
+	</variableList>
+</projectDescription>

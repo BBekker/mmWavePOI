@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?ccsproject version="1.0"?>
+<projectOptions>
+	<ccsVersion value="9.0.0"/>
+	<deviceVariant value="Cortex R.IWR1642"/>
+	<deviceFamily value="TMS470"/>
+	<deviceEndianness value="little"/>
+	<codegenToolVersion value="18.12.1.LTS"/>
+	<isElfFormat value="true"/>
+	<linkerCommandFile value="mss_mmw_linker.cmd"/>
+	<rts value="libc.a"/>
+	<createSlaveProjects value=""/>
+	<templateProperties value="id=pplcount_16xx_mss.projectspec.pplcount_16xx_mss,type=rtsc,products=com.ti.rtsc.SYSBIOS:6.53.02.00;com.ti.MMWAVE_SDK:2.0.0.04;,xdcToolsVersion=3.50.04.43_core,target=ti.targets.arm.elf.R4F,platform=ti.platforms.cortexR:IWR16XX:false:200,endianness=little,output_format=elf,buildProfile=release,configuroOptions=--compileOptions &quot;--enum_type=int &quot; "/>
+	<origin value="C:\ti\mmwave_industrial_toolbox_3_3_1\labs\lab0011-pplcount\lab0011_pplcount_pjt\radarDemo\chains\RadarReceiverPeopleCounting\mmw_PCDemo\mss\pplcount_16xx_mss.projectspec"/>
+	<filesToOpen value=""/>
+	<isTargetManual value="false"/>
+</projectOptions>
