@@ -1262,13 +1262,8 @@ void 	MmwDemo_initConfigStruct(MmwDemo_Cfg  *demoCfg, radarProcessConfig_t    *r
 
 void MmwDemo_dataPathConfigBuffers(uint32_t adcBufAddress, MmwDemo_Cfg  *demoCfg, MmwDemo_DSS_DataPathObj *dataPathObj)
 {
-    //MmwDemo_DSS_DataPathObj *dataPathObj;
     radarOsal_heapConfig heapconfig[SOC_XWR16XX_DSS_MAXNUMHEAPS];
 	ProcessErrorCodes procErrorCode;
-
-    /* Get data path object and control configuration */
-    //dataPathObj  = &gMmwDssMCB.dataPathObj;
-	int32_t tempNumSamples;
 
     dataPathObj->ADCdataBuf = (cmplx16ImRe_t *)adcBufAddress;
 
@@ -1309,54 +1304,33 @@ void MmwDemo_dataPathConfigBuffers(uint32_t adcBufAddress, MmwDemo_Cfg  *demoCfg
 	dataPathObj->radarProcessHandle = (void *) radarProcessCreate(&dataPathObj->radarProcConfig, &procErrorCode);
     if (procErrorCode > PROCESS_OK)
     {
-    	System_printf("radar process creat error = %d! Exit!\n", (uint8_t)procErrorCode);
+    	System_printf("radar process create error = %d! Exit!\n", (uint8_t)procErrorCode);
     	DebugP_assert(0);
     }
     dataPathObj->outputDataToArm = (outputToARM_t *)radarOsal_memAlloc(RADARMEMOSAL_HEAPTYPE_DDR_CACHED, 0, sizeof(outputToARM_t), 128);
     memset((void *)dataPathObj->outputDataToArm, 0, sizeof(outputToARM_t));
 	dataPathObj->scratchBuf 			= 	(int32_t *)radarOsal_memAlloc(RADARMEMOSAL_HEAPTYPE_LL1, 1, MMW_TM_DEMO_EDMASCATCHBUF_SIZE, 8); //fixed to 16k byte
 
-	//if (MMW_TM_DEMO_EDMASCATCHBUF_SIZE >= dataPathObj->radarProcConfig.fftSize1D * 2 * sizeof(cmplx16ImRe_t) * dataPathObj->radarProcConfig.numPhyRxAntenna)
-	if (0)
-	{
-		/* no PING PONG for input, only one shot for all antennas of the chirp */
-		dataPathObj->adcDataL2[PING] 		= 	(cmplx16ImRe_t *)&dataPathObj->scratchBuf[0];
-		dataPathObj->adcDataL2[PONG] 		= 	NULL;
-		dataPathObj->rangeProcOut[PING] 	= 	(int32_t *)&dataPathObj->scratchBuf[dataPathObj->radarProcConfig.fftSize1D * dataPathObj->radarProcConfig.numPhyRxAntenna];
-		dataPathObj->rangeProcOut[PONG] 	= 	(int32_t *)&dataPathObj->scratchBuf[dataPathObj->radarProcConfig.fftSize1D * dataPathObj->radarProcConfig.numPhyRxAntenna + dataPathObj->radarProcConfig.fftSize1D];
-	}
-	else
-	{
-		/* PING PONG IN OUT */
-		dataPathObj->adcDataL2[PING] 		= 	(cmplx16ImRe_t *)&dataPathObj->scratchBuf[0];
-		dataPathObj->adcDataL2[PONG] 		= 	(cmplx16ImRe_t *)&dataPathObj->scratchBuf[dataPathObj->radarProcConfig.fftSize1D];
-		dataPathObj->rangeProcOut[PING] 	= 	(int32_t *)&dataPathObj->scratchBuf[2 * dataPathObj->radarProcConfig.fftSize1D];
-		dataPathObj->rangeProcOut[PONG] 	= 	(int32_t *)&dataPathObj->scratchBuf[3 * dataPathObj->radarProcConfig.fftSize1D];
-	}
+
+    /* PING PONG IN OUT */
+    dataPathObj->adcDataL2[PING] 		= 	(cmplx16ImRe_t *)&dataPathObj->scratchBuf[0];
+    dataPathObj->adcDataL2[PONG] 		= 	(cmplx16ImRe_t *)&dataPathObj->scratchBuf[dataPathObj->radarProcConfig.fftSize1D];
+    dataPathObj->rangeProcOut[PING] 	= 	(int32_t *)&dataPathObj->scratchBuf[2 * dataPathObj->radarProcConfig.fftSize1D];
+    dataPathObj->rangeProcOut[PONG] 	= 	(int32_t *)&dataPathObj->scratchBuf[3 * dataPathObj->radarProcConfig.fftSize1D];
 	
-	//if ((dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D * sizeof(int32_t)) >= (MMW_L1_SCRATCH_SIZE >> 2))
-	if(1)
-	{
-        dataPathObj->rangeAsimuthProcin[PING]  	= 	(int32_t *)&dataPathObj->scratchBuf[0 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        //dataPathObj->rangeAsimuthProcin[PONG]    =   (int32_t *)&dataPathObj->scratchBuf[1 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        dataPathObj->rangeAsimuthProcOut[PING] 	= 	(float *)&dataPathObj->scratchBuf[2 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        //dataPathObj->rangeAsimuthProcOut[PONG]   =   (float *)&dataPathObj->scratchBuf[3 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        dataPathObj->dopplerUsePingPong     =   0;
-	}
-	else
-	{
-        dataPathObj->rangeAsimuthProcin[PING]    =   (int32_t *)&dataPathObj->scratchBuf[0 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        dataPathObj->rangeAsimuthProcin[PONG]    =   (int32_t *)&dataPathObj->scratchBuf[1 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        dataPathObj->rangeAsimuthProcOut[PING]   =   (float *)&dataPathObj->scratchBuf[2 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        dataPathObj->rangeAsimuthProcOut[PONG]   =   (float *)&dataPathObj->scratchBuf[3 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
-        dataPathObj->dopplerUsePingPong     =   1;
-	}
+
+    dataPathObj->rangeAsimuthProcin[PING]  	= 	(int32_t *)&dataPathObj->scratchBuf[0 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
+    //dataPathObj->rangeAsimuthProcin[PONG]    =   (int32_t *)&dataPathObj->scratchBuf[1 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
+    dataPathObj->rangeAsimuthProcOut[PING] 	= 	(float *)&dataPathObj->scratchBuf[2 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
+    //dataPathObj->rangeAsimuthProcOut[PONG]   =   (float *)&dataPathObj->scratchBuf[3 * dataPathObj->radarProcConfig.numAntenna * dataPathObj->radarProcConfig.fftSize2D];
+    dataPathObj->dopplerUsePingPong     =   0;
+
+
 	dataPathObj->fftOut1D  				= 	(cmplx16ImRe_t *)dataPathObj->radarProcConfig.pFFT1DBuffer;
 	dataPathObj->numPhyRxAntennas  		= 	(uint32_t)dataPathObj->radarProcConfig.numPhyRxAntenna;
 	dataPathObj->numVirtRxAntennas  	= 	(uint32_t)dataPathObj->radarProcConfig.numAntenna;
 	dataPathObj->numTxAntennas  		= 	(uint32_t)dataPathObj->radarProcConfig.numTxAntenna;
-	tempNumSamples 						= 	(((uint32_t)dataPathObj->radarProcConfig.numAdcSamplePerChirp + 16/2) >> 4) << 4; // round up to multiple of 16!!!
-	dataPathObj->numAdcSamples  		= 	tempNumSamples;
+	dataPathObj->numAdcSamples  		= 	(((uint32_t)dataPathObj->radarProcConfig.numAdcSamplePerChirp + 16/2) >> 4) << 4; // round up to multiple of 16!!!
 	dataPathObj->numChirpsPerFrame  	= 	(uint32_t)dataPathObj->radarProcConfig.numChirpPerFrame;
 	dataPathObj->numRangeBins  			= 	(uint32_t)dataPathObj->radarProcConfig.fftSize1D;
 	dataPathObj->numAzimuthBins  		= 	(uint32_t)dataPathObj->radarProcConfig.numAzimuthBin;

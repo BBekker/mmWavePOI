@@ -410,7 +410,7 @@ uint8_t radarFrameProcessRun(void *handle, void * outBuffer)
 		processInst->aoaInput->azimuthIndx = processInst->detectionCFAROutput->dopplerInd[i]; 
 		processInst->aoaInput->inputAntSamples = &processInst->pFFT1DBuffer[processInst->aoaInput->rangeIndx * processInst->nRxAnt * processInst->numChirpsPerFrame];
 		processInst->aoaInput->bwDemon = processInst->localPDPPtr[processInst->aoaInput->azimuthIndx][processInst->aoaInput->rangeIndx];
-		processInst->aoaBFErrorCode =     RADARDEMO_aoaEstCaponBF_run(
+		processInst->aoaBFErrorCode =     RADARDEMO_aoaEstCaponBF_doppler(
 								processInst->DoAInstance,
 								processInst->aoaInput,
 								processInst->aoaOutput);

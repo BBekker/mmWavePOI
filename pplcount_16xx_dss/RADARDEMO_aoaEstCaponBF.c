@@ -176,7 +176,7 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_run(
                             OUT RADARDEMO_aoAEstCaponBF_output   * estOutput)
 
 {
-    uint32_t     i, rnOffset;
+    uint32_t   rnOffset;
     RADARDEMO_aoaEstCaponBF_handle *aoaEstBFInst;
     cplx16_t     * inputSignal;
     RADARDEMO_aoaEstCaponBF_errorCode errorCode = RADARDEMO_AOACAPONBF_NO_ERROR;
@@ -206,96 +206,26 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_run(
         return (errorCode);
 
 	rnOffset	=	(aoaEstBFInst->nRxAnt * (1 + aoaEstBFInst->nRxAnt)) >> 1;
-	if(input->processingStepSelector == 0) /* estimate the range-azimuth heatmap*/
-	{
-		/*Calculate covariance matrix and invert */
-		RADARDEMO_aoaEstCaponBF_covInv(
-				(uint8_t) (input->fallBackToConvBFFlag ^ 1),
-				(uint8_t) input->clutterRemovalFlag,
-				(float) aoaEstBFInst->gamma,
-				(int32_t) aoaEstBFInst->nRxAnt,
-				(int32_t) input->nChirps,
-				(int32_t *) &aoaEstBFInst->scratchPad[0],
-				(cplx16_t *) input->inputAntSamples,
-				(cplxf_t  *) &aoaEstBFInst->invRnMatrices[input->rangeIndx * rnOffset]
-			);
-		/* Capon beamforming */
-		RADARDEMO_aoaEstCaponBF_heatmap(
-				(uint8_t) (input->fallBackToConvBFFlag ^ 1),
-				(int32_t) aoaEstBFInst->nRxAnt,
-				(int32_t)  aoaEstBFInst->steeringVecSize,
-				(cplxf_t *) aoaEstBFInst->steeringVec,
-				(cplxf_t  *) &aoaEstBFInst->invRnMatrices[input->rangeIndx * rnOffset],
-				(float *) estOutput->rangeAzimuthHeatMap
-			);
-
-	}
-	else /*Doppler estimation */
-	{
-		float * dopplerFFTInput;
-		int32_t * localScratch, scratchOffset;
-		float * dopplerFFTOutput;
-		unsigned char *brev = NULL;
-		int32_t rad2D;
-		float max;
-		int32_t index;
-		__float2_t f2temp;
-		float ftemp;
-
-		scratchOffset		=	0;
-		dopplerFFTInput		=	(float *)&aoaEstBFInst->scratchPad[scratchOffset];
-		scratchOffset		+=	2 * input->nChirps;
-		localScratch		=	(int32_t *)&aoaEstBFInst->scratchPad[scratchOffset];
-		dopplerFFTOutput	=	(float *)&aoaEstBFInst->scratchPad[scratchOffset];
-
-		RADARDEMO_aoaEstCaponBF_dopperEstInput(
-				(uint8_t) (input->fallBackToConvBFFlag ^ 1),
-				(int32_t) aoaEstBFInst->nRxAnt,
-				(int32_t) input->nChirps,
-				(cplx16_t *) input->inputAntSamples,
-				(cplxf_t *) &aoaEstBFInst->steeringVec[input->azimuthIndx * (aoaEstBFInst->nRxAnt - 1)],
-				(cplxf_t  *) &aoaEstBFInst->invRnMatrices[input->rangeIndx * rnOffset],
-				(int32_t *) localScratch,
-				(float) input->bwDemon,
-				(float *) dopplerFFTInput
-			);
-
-		//WTF does this doooooo
-		i  = 30 - _norm(aoaEstBFInst->dopplerFFTSize);
-		if ((i & 1) == 0)
-			rad2D = 4;
-		else
-			rad2D = 2;
-
-		//This does the actual fft???
-		DSPF_sp_fftSPxSP (
-				aoaEstBFInst->dopplerFFTSize,
-				dopplerFFTInput,
-				(float *)aoaEstBFInst->twiddle, 
-				dopplerFFTOutput,
-				brev,
-				rad2D,
-				0,
-				aoaEstBFInst->dopplerFFTSize);
-
-		//Peak finding?
-		max		= 0.f;
-		index	=	0;
-		for (i = 0; i < aoaEstBFInst->dopplerFFTSize; i++)
-		{
-			f2temp	=	_amem8_f2(&dopplerFFTOutput[2 * i]);
-			f2temp	=	_dmpysp(f2temp,f2temp);
-			ftemp	=	_hif2(f2temp) + _lof2(f2temp);
-			if (ftemp > max)
-			{
-				max		=	ftemp;
-				index	=	i;
-			}
-		}
-
-		estOutput->dopplerIdx	=	index;
-		estOutput->angleEst		=	-aoaEstBFInst->estAngleRange + input->azimuthIndx * aoaEstBFInst->estAngleResolution;
-	}
+    /*Calculate covariance matrix and invert */
+    RADARDEMO_aoaEstCaponBF_covInv(
+            (uint8_t) (input->fallBackToConvBFFlag ^ 1),
+            (uint8_t) input->clutterRemovalFlag,
+            (float) aoaEstBFInst->gamma,
+            (int32_t) aoaEstBFInst->nRxAnt,
+            (int32_t) input->nChirps,
+            (int32_t *) &aoaEstBFInst->scratchPad[0],
+            (cplx16_t *) input->inputAntSamples,
+            (cplxf_t  *) &aoaEstBFInst->invRnMatrices[input->rangeIndx * rnOffset]
+        );
+    /* Capon beamforming */
+    RADARDEMO_aoaEstCaponBF_heatmap(
+            (uint8_t) (input->fallBackToConvBFFlag ^ 1),
+            (int32_t) aoaEstBFInst->nRxAnt,
+            (int32_t)  aoaEstBFInst->steeringVecSize,
+            (cplxf_t *) aoaEstBFInst->steeringVec,
+            (cplxf_t  *) &aoaEstBFInst->invRnMatrices[input->rangeIndx * rnOffset],
+            (float *) estOutput->rangeAzimuthHeatMap
+        );
     return (errorCode);
 }
 
