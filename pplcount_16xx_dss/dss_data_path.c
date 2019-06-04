@@ -1027,6 +1027,7 @@ void MmwDemo_printHeapStats()
 
 
 }
+
 #if 0
 uint32_t checkUniqueChirpProfile(MmwDemo_Cfg *demoCfg, uint32_t totalProfile)
 {
@@ -1050,6 +1051,7 @@ uint32_t checkUniqueChirpProfile(MmwDemo_Cfg *demoCfg, uint32_t totalProfile)
     return(nUniqueProfile);
 }
 #endif
+
 void 	MmwDemo_initConfigStruct(MmwDemo_Cfg  *demoCfg, radarProcessConfig_t    *radarProcConfig)
 {
 	uint32_t 		uitemp;

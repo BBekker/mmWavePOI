@@ -253,6 +253,8 @@ typedef struct MmwDemo_output_message_target_t
     float		ec[9];
     float       g;
 	
+    float heatmap[100];
+
 } MmwDemo_output_message_target;
 
 /*!

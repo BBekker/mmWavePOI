@@ -235,18 +235,17 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_doppler(
                             OUT RADARDEMO_aoAEstCaponBF_output   * estOutput)
 
 {
-    uint32_t     i, rnOffset;
-    RADARDEMO_aoaEstCaponBF_handle *aoaEstBFInst;
-    cplx16_t     * inputSignal;
+
+    RADARDEMO_aoaEstCaponBF_handle *aoaEstBFInst = (RADARDEMO_aoaEstCaponBF_handle *) handle;
+    cplx16_t *inputSignal;
     RADARDEMO_aoaEstCaponBF_errorCode errorCode = RADARDEMO_AOACAPONBF_NO_ERROR;
 
-    aoaEstBFInst    =   (RADARDEMO_aoaEstCaponBF_handle *) handle;
 
     if ( input == NULL)
         errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
     else
     {
-        inputSignal     =   input->inputAntSamples;
+        inputSignal = input->inputAntSamples;
         if ( inputSignal == NULL)
             errorCode   =   RADARDEMO_AOACAPONBF_INOUTPTR_NOTCORRECT;
     }
@@ -264,23 +263,16 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_doppler(
     if (errorCode > RADARDEMO_AOACAPONBF_NO_ERROR)
         return (errorCode);
 
-    rnOffset    =   (aoaEstBFInst->nRxAnt * (1 + aoaEstBFInst->nRxAnt)) >> 1;
+    // wtf
+    uint32_t  rnOffset  =  (aoaEstBFInst->nRxAnt * (1 + aoaEstBFInst->nRxAnt)) >> 1;
 
-    float * dopplerFFTInput;
-    int32_t * localScratch, scratchOffset;
-    float * dopplerFFTOutput;
+    //Allocate some buffers
+    int32_t scratchOffset = 0;
+    float * dopplerFFTInput     =   (float *)&aoaEstBFInst->scratchPad[scratchOffset];
+    scratchOffset =  2 * input->nChirps;
+    int32_t * localScratch        =   (int32_t *)&aoaEstBFInst->scratchPad[scratchOffset];
+    float * dopplerFFTOutput    =   (float *)&aoaEstBFInst->scratchPad[scratchOffset];
     unsigned char *brev = NULL;
-    int32_t rad2D;
-    float max;
-    int32_t index;
-    __float2_t f2temp;
-    float ftemp;
-
-    scratchOffset       =   0;
-    dopplerFFTInput     =   (float *)&aoaEstBFInst->scratchPad[scratchOffset];
-    scratchOffset       +=  2 * input->nChirps;
-    localScratch        =   (int32_t *)&aoaEstBFInst->scratchPad[scratchOffset];
-    dopplerFFTOutput    =   (float *)&aoaEstBFInst->scratchPad[scratchOffset];
 
     RADARDEMO_aoaEstCaponBF_dopperEstInput(
             (uint8_t) (input->fallBackToConvBFFlag ^ 1),
@@ -294,9 +286,9 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_doppler(
             (float *) dopplerFFTInput
         );
 
-    //WTF does this doooooo
-    i  = 30 - _norm(aoaEstBFInst->dopplerFFTSize);
-    if ((i & 1) == 0)
+    int rad2D = 0;
+    //"should be 4 if N can be represented as Power of 4 else, n_min should be 2"
+    if (!(30 - _norm(aoaEstBFInst->dopplerFFTSize) & 1))
         rad2D = 4;
     else
         rad2D = 2;
@@ -313,10 +305,13 @@ RADARDEMO_aoaEstCaponBF_errorCode    RADARDEMO_aoaEstCaponBF_doppler(
             aoaEstBFInst->dopplerFFTSize);
 
     //Peak finding?
-    max     = 0.f;
-    index   =   0;
-    for (i = 0; i < aoaEstBFInst->dopplerFFTSize; i++)
+    float max     = 0.f;
+    unsigned int index   =   0;
+    for (int i = 0; i < aoaEstBFInst->dopplerFFTSize; i++)
     {
+        __float2_t f2temp;
+        float ftemp;
+
         f2temp  =   _amem8_f2(&dopplerFFTOutput[2 * i]);
         f2temp  =   _dmpysp(f2temp,f2temp);
         ftemp   =   _hif2(f2temp) + _lof2(f2temp);

@@ -65,15 +65,18 @@
 #include <ti/sysbios/family/c64p/Hwi.h>
 #include <ti/sysbios/family/c64p/EventCombiner.h>
 
+#include "radarProcess.h"
+
 /* MMWSDK Include Files. */
 #include <ti/drivers/soc/soc.h>
 #include <ti/common/sys_common.h>
 #include <ti/utils/cycleprofiler/cycle_profiler.h>
 
 /* MMWAVE Demo Include Files */
-#include <chains/RadarReceiverPeopleCounting/mmw_PCDemo/dss/dss_mmw.h>
-#include <chains/RadarReceiverPeopleCounting/mmw_PCDemo/dss/dss_data_path.h>
+#include <dss_mmw.h>
+#include <dss_data_path.h>
 #include <chains/RadarReceiverPeopleCounting/mmw_PCDemo/common/mmw_messages.h>
+
 
 /* Related to linker copy table for copying from L3 to L1PSRAM for example */
 #include <cpy_tbl.h>
@@ -687,6 +690,7 @@ int32_t MmwDemo_dssSendProcessOutputToMSS
         infoSize    =   obj->sizePointCloudInfo;
         totalSize   =   sizeof(MmwDemo_detOutputHdr) + infoSize;
 
+    //Send Detected objects message
     if( retVal == 0)
     {
         /* Send a message to MSS to log the output data */
@@ -703,6 +707,25 @@ int32_t MmwDemo_dssSendProcessOutputToMSS
             retVal = -1;
         }
     }
+
+
+    // Send heatmap
+    if( retVal == 0)
+    {
+
+        message.type = MMWDEMO_DSS2MSS_HEATMAP;
+        message.body.heatmap.location = &obj->radarProcConfig.heatMapMem;
+        message.body.heatmap.size = obj->radarProcConfig.heatMapMemSize;
+
+        /*work around MING MING MING */
+        cache_wbInvAllL2Wait();
+
+        if (MmwDemo_mboxWrite(&message) != 0)
+        {
+            retVal = -1;
+        }
+    }
+
 Exit:
 #ifdef DEBUG
     glbDebugBuf[glbDebugBufCnt++] = 0xbbbb;
@@ -1341,6 +1364,12 @@ static void MmwDemo_dssDataPathTask(UArg arg0, UArg arg1)
         message.body.dssStaticInfo.heatmapAddress = (uint32_t)(gMmwDssMCB.dataPathObj.radarProcConfig.heatMapMem);
         message.body.dssStaticInfo.heatmapRowLen = (uint32_t) (gMmwDssMCB.dataPathObj.numRangeBins);
         message.body.dssStaticInfo.heatmapNumRows = (uint32_t) (gMmwDssMCB.dataPathObj.numAzimuthBins);
+
+        radarProcessInstance_t *radarproc = (radarProcessInstance_t*) gMmwDssMCB.dataPathObj.radarProcessHandle;
+        message.body.dssStaticInfo.rangeres = radarproc->rangeRes;
+        message.body.dssStaticInfo.dopplerres = radarproc->dopplerRes;
+        message.body.dssStaticInfo.angleres = radarproc->angleRes;
+
 
         if (MmwDemo_mboxWrite(&message) != 0)
         {

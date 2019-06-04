@@ -864,7 +864,7 @@ void MmwDemo_mssInitTask(UArg arg0, UArg arg1)
  *      Not Applicable.
  */
 int main (void)
-{
+ {
     Task_Params     taskParams;
     int32_t         errCode;
     SOC_Cfg         socCfg;

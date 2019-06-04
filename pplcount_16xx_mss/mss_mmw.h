@@ -184,6 +184,8 @@ typedef struct MmwDemo_MSS_DataPathObj_t
 	float * heatmapAddress;
     uint32_t   heatmapRowLen;
     uint32_t   heatmapNumRows;
+    float heatmapRangeRes;
+    float heatmapAngleRes;
 	
 	cycleLog_t cycleLog;
 

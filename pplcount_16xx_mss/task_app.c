@@ -170,6 +170,37 @@ VarParams appVariationParamTable[2] = {
 extern MmwDemo_MCB    gMmwMssMCB;
 
 
+void cartesian2spherical(float *cart, float *sph)
+{
+#define PI 3.14159265358979323846f
+    float posx;
+    float posy;
+    float velx;
+    float vely;
+
+    // cart = [posx posy velx vely accx accy]
+    // sph = [range azimuth doppler]
+    posx = cart[0];
+    posy = cart[1];
+    velx = cart[2];
+    vely = cart[3];
+
+    // calc range
+    sph[0] = sqrtf(posx*posx + posy*posy);
+
+    //calc azimuth
+    if (posy == 0)
+        sph[1] = PI/2;
+    else if (posy > 0)
+        sph[1] = atanf(posx/posy);
+    else
+        sph[1] = atanf(posx/posy) + PI;
+
+    //calc doppler;
+    sph[2] = (posx*velx+posy*vely)/sph[0];
+
+}
+
 /**
  *  @b Description
  *  @n
@@ -243,6 +274,29 @@ void MmwDemo_appTask(UArg arg0, UArg arg1)
             memcpy(targetList->target[n].ec, targetDescr[n].EC, sizeof(targetDescr[n].EC));
 
             targetList->target[n].g = targetDescr[n].G;
+//
+            float spherical[3];
+            cartesian2spherical(targetDescr[n].S, spherical);
+//
+//            //Todo: Convert to index
+            int rangeidx = MAX(5, roundf(spherical[0] / gMmwMssMCB.mssDataPathObj.heatmapRangeRes));
+            int rangesize = roundf(spherical[0] / gMmwMssMCB.mssDataPathObj.heatmapRangeRes);
+            int angleidx = roundf(spherical[1] / ((gMmwMssMCB.mssDataPathObj.heatmapAngleRes /360) * 2*PI)) + gMmwMssMCB.mssDataPathObj.heatmapNumRows/2 ;
+            System_printf("range %f: %d, angle %f: %d \n",spherical[0], rangeidx, spherical[1], angleidx);
+//
+//            //Copy local heatmap
+            for(int i = -5; i < 5; i++)
+            {
+                if((i + angleidx) >= 0 && (i + angleidx) < gMmwMssMCB.mssDataPathObj.heatmapNumRows)
+                {
+
+
+                    memcpy(&targetList->target[n].heatmap[(i+5)*10],
+                           &gMmwMssMCB.mssDataPathObj.heatmapAddress[(i + angleidx)*gMmwMssMCB.mssDataPathObj.heatmapRowLen + rangeidx - 5],
+                           MAX(0,MIN(gMmwMssMCB.mssDataPathObj.heatmapRowLen - rangeidx - 5, 10)) * sizeof(float));
+                }
+
+            }
         }
 
         if(tNum > 0)
@@ -418,7 +472,7 @@ int32_t MmwDemo_CLITrackingCfg (int32_t argc, char* argv[])
     memset ((void *)gMmwMssMCB.targetDescrHandle, 0, sizeof(MmwDemo_targetDescrHandle));
 
     /* Allocate memory for ping/pong target lists */
-    targetListSize = sizeof(MmwDemo_output_message_tl) + config.maxNumTracks*sizeof(GTRACK_targetDesc);
+    targetListSize = sizeof(MmwDemo_output_message_tl) + config.maxNumTracks*sizeof(MmwDemo_output_message_target);
     gMmwMssMCB.targetDescrHandle->tList[0] = (MmwDemo_output_message_targetList *)MemoryP_ctrlAlloc(targetListSize, sizeof(float));
     gMmwMssMCB.targetDescrHandle->tList[1] = (MmwDemo_output_message_targetList *)MemoryP_ctrlAlloc(targetListSize, sizeof(float));
 

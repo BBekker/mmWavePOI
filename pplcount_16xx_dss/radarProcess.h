@@ -42,6 +42,9 @@
 #include <swpform.h>
 #include <modules/clustering/dbscan/api/RADARDEMO_clusteringDBscan.h>
 #include <modules/tracking/clusterTracker/api/RADARDEMO_clusterTracker.h>
+#include <modules/detection/CFAR/api/RADARDEMO_detectionCFAR.h>
+#include <modules/DoA/CaponBF/api/RADARDEMO_aoaEstCaponBF.h>
+#include <modules/rangeProc/rangeProc/api/RADARDEMO_rangeProc.h>
 
 #if defined(_WIN32) || defined(CCS)
 #include <stdio.h>
@@ -55,7 +58,7 @@
  *
  *  \sa
  */
-#define  M_PI 3.14159265358979323846f
+//#define  M_PI 3.14159265358979323846f
 
 #define  NUM_RADAR_TXANT        2    // 2 transmitting antennas
 #define  NUM_RADAR_RXANT        4    // 4 receiving antennas
@@ -148,6 +151,49 @@ typedef struct _radarModuleConfig_
 	float       *heatMapMem;
 	radarProcessBenchmarkObj * benchmarkPtr;
 }radarProcessConfig_t;
+
+typedef struct _processInstance_
+{
+    // frame timing in ms
+
+    float framePeriod;
+    void  * rangeFFTInstance;
+    void  * detectionInstance;
+    void  * DoAInstance;
+
+    RADARDEMO_rangeProc_input *rangeProcInput;
+    cplx16_t *pFFT1DBuffer;
+
+    //float *localDopplerInBufPtr;
+    float * localPDP;
+    float ** localPDPPtr;
+
+    RADARDEMO_detectionCFAR_output * detectionCFAROutput;
+
+    uint8_t mimoModeFlag;  /**<Flag for MIMO mode: 0 -- SIMO, 1 -- TDM MIMO, 2 -- FDM or BF*/
+    RADARDEMO_aoAEstCaponBF_input *aoaInput;
+    float * aoaInputSignal;
+    RADARDEMO_aoAEstCaponBF_output *aoaOutput;
+
+    RADARDEMO_rangeProc_errorCode rangeProcErrorCode;
+    RADARDEMO_detectionCFAR_errorCode cfarErrorCode;
+    RADARDEMO_aoaEstCaponBF_errorCode aoaBFErrorCode;
+
+    int32_t fftSize1D;
+    int32_t fftSize2D;
+    int32_t numChirpsPerFrame;
+    int32_t numAdcSamplePerChirp;
+    int32_t nRxAnt;
+    int32_t maxNumDetObj;
+    int32_t numAzimuthBin;
+    float   rangeRes;
+    float   dopplerRes;
+    float   angleRes;
+
+
+    //float    * scratchBuffer;
+    radarProcessBenchmarkObj * benchmarkPtr;
+}radarProcessInstance_t;
 
 typedef enum
 {

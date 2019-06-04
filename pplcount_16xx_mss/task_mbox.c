@@ -304,8 +304,15 @@ void MmwDemo_mboxReadTask(UArg arg0, UArg arg1)
                 	gMmwMssMCB.mssDataPathObj.heatmapAddress = (float *)SOC_translateAddress(message.body.dssStaticInfo.heatmapAddress, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL);
 					gMmwMssMCB.mssDataPathObj.heatmapRowLen = message.body.dssStaticInfo.heatmapRowLen;
 					gMmwMssMCB.mssDataPathObj.heatmapNumRows = message.body.dssStaticInfo.heatmapNumRows;
+					gMmwMssMCB.mssDataPathObj.heatmapRangeRes = message.body.dssStaticInfo.rangeres;
+                    gMmwMssMCB.mssDataPathObj.heatmapAngleRes = message.body.dssStaticInfo.angleres;
+
 					break;
 					
+                case MMWDEMO_DSS2MSS_HEATMAP:
+                    srcAddress = (inputFromDSP *)SOC_translateAddress(message.body.detObj.detObjOutAddress, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL);
+                    break;
+
 				default:
                 {
                     /* Message not support */

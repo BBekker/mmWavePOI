@@ -36,7 +36,7 @@
  *
 */
 
-#include <chains/RadarReceiverPeopleCounting/radarProcess.h>
+#include <radarProcess.h>
 #include <math.h>
 #include <modules/detection/CFAR/api/RADARDEMO_detectionCFAR.h>
 #include <modules/DoA/CaponBF/api/RADARDEMO_aoaEstCaponBF.h>
@@ -54,48 +54,6 @@
 #define MAXANT (8)
 #define MAXWIN1DSize (16)
 //user input configuration parameters
-typedef struct _processInstance_
-{
-    // frame timing in ms
-
-	float framePeriod;
-    void  * rangeFFTInstance;
-    void  * detectionInstance;
-    void  * DoAInstance;
-
-	RADARDEMO_rangeProc_input *rangeProcInput;
-    cplx16_t *pFFT1DBuffer;
-
-	//float *localDopplerInBufPtr;
-	float * localPDP;
-	float ** localPDPPtr;
-
-	RADARDEMO_detectionCFAR_output * detectionCFAROutput;
-
-	uint8_t mimoModeFlag;  /**<Flag for MIMO mode: 0 -- SIMO, 1 -- TDM MIMO, 2 -- FDM or BF*/
-	RADARDEMO_aoAEstCaponBF_input *aoaInput;
-	float * aoaInputSignal;
-	RADARDEMO_aoAEstCaponBF_output *aoaOutput;
-
-	RADARDEMO_rangeProc_errorCode rangeProcErrorCode;
-	RADARDEMO_detectionCFAR_errorCode cfarErrorCode;
-	RADARDEMO_aoaEstCaponBF_errorCode aoaBFErrorCode;
-
-	int32_t fftSize1D;
-	int32_t fftSize2D;
-	int32_t numChirpsPerFrame;
-	int32_t numAdcSamplePerChirp;
-	int32_t nRxAnt;
-	int32_t maxNumDetObj;
-	int32_t numAzimuthBin;
-	float   rangeRes;
-	float   dopplerRes;
-	float   angleRes;
-
-
-	//float    * scratchBuffer;
-	radarProcessBenchmarkObj * benchmarkPtr;
-}radarProcessInstance_t;
 
 #define RAD_TO_DEG      ( 3.1415926f/180.f)
 #define DEG_TO_RAD      ( 180.f/3.1415926f)

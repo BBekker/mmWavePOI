@@ -66,7 +66,8 @@ typedef enum MmwDemo_message_type_e
 
     /*! @brief   message types for DSS to MSS communication */
     MMWDEMO_DSS2MSS_CONFIGDONE = 0xFEED0100,
-    MMWDEMO_DSS2MSS_DETOBJ_READY
+    MMWDEMO_DSS2MSS_DETOBJ_READY,
+    MMWDEMO_DSS2MSS_HEATMAP
 
 }MmwDemo_message_type;
 
@@ -86,6 +87,14 @@ typedef struct MmwDemo_detObjMsg_t
     uint32_t   detObjOutsize;
 }MmwDemo_detObjMsg;
 
+
+typedef struct MmwDemo_heatmapMsg_t
+{
+    uint32_t *location;
+    uint32_t size;
+} MmwDemo_heatmapMsg;
+
+
 /**
  * @brief
  *  Message for reporting static info from DSS to MSS.
@@ -104,6 +113,9 @@ typedef struct MmwDemo_dssStaticInfo_t
     /*! @brief number of rows of the heatmap */
     uint32_t   heatmapNumRows;
 	
+    float rangeres;
+    float dopplerres;
+    float angleres;
 }MmwDemo_dssStaticInfo;
 
 /**
@@ -139,6 +151,9 @@ typedef union MmwDemo_message_body_u
 	
     /*! @brief   Datapath output logger setting */
     uint8_t               dataLogger;
+
+    /* Heatmap data */
+    MmwDemo_heatmapMsg heatmap;
 }MmwDemo_message_body;
 
 /**
