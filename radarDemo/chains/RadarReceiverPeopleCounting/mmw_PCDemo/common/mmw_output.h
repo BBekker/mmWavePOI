@@ -83,6 +83,8 @@ typedef enum MmwDemo_output_message_type_e
     /*! @brief   Stats information */
     MMWDEMO_OUTPUT_MSG_STATS,
 
+    MMWDEMO_OUTPUT_MSG_HEATMAP,
+
     MMWDEMO_OUTPUT_MSG_MAX
 } MmwDemo_output_message_type;
 

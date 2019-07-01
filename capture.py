@@ -1,16 +1,11 @@
 import os
 import io
 from construct import *
-import matplotlib.pyplot as plt
-import matplotlib
-import matplotlib.cm as cm
-from matplotlib import animation, rc
+import pyqtgraph as pg
 import numpy as np
 import serial
 import time
 import datetime
-import queue
-import threading
 
 
 #Packet definition
@@ -30,7 +25,8 @@ class Message(Enum):
     MMWDEMO_OUTPUT_MSG_TARGET_LIST = 7
     MMWDEMO_OUTPUT_MSG_TARGET_INDEX = 8
     MMWDEMO_OUTPUT_MSG_STATS = 9
-    MMWDEMO_OUTPUT_MSG_MAX = 10
+    MMWDEMO_OUTPUT_MSG_HEATMAP = 10
+    MMWDEMO_OUTPUT_MSG_MAX = 11
     
     
 frame = Aligned(4,
@@ -99,15 +95,30 @@ frame = Aligned(4,
                     "activeFrameCPULoad" / Int32ul,
                     "interFrameCPULoad" / Int32ul
                 ),
-                }, default=Array(this.len, Byte))
+
+                Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
+                    Float32l[lambda ctx: int(ctx.len / 4)],
+                }
+                , default=Array(this.len, Byte))
          )[this.header.numTLVs] 
     )
 )
 
 
+def cart2pol(x, y):
+    rho = np.sqrt(x**2 + y**2)
+    phi = np.arctan2(y, x)
+    return(rho, phi)
+
+def pol2cart(rho, phi):
+    x = rho * np.cos(phi)
+    y = rho * np.sin(phi)
+    return(x, y)
 
 def parseData(stream, stopEvent):
-    while not stopEvent.is_set():
+
+    dataSerial = serial.Serial(stream, 921600)
+    while True:
         buffer += dataSerial.read(1)
         outputfile.write(bytes(buffer[-1:]))
         if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
@@ -123,10 +134,10 @@ def startSensor():
     with serial.Serial("COM10",115200, parity=serial.PARITY_NONE) as controlSerial:
         with open("customchirp.cfg", 'r') as configfile:
             for line in configfile:
-                print(">> " + line)
+                print(">> " + line, flush = True)
                 controlSerial.write(line.encode('ascii'))
-                print("<< " + controlSerial.readline().decode('ascii')) #echo
-                print("<< " + controlSerial.readline().decode('ascii')) #"done"
+                print("<< " + controlSerial.readline().decode('ascii'), flush = True) #echo
+                print("<< " + controlSerial.readline().decode('ascii'), flush = True) #"done"
                 controlSerial.read(11) #prompt
                 time.sleep(0.01)
             print("sensor started")
@@ -143,86 +154,90 @@ def matchArrays(a, b):
 
 def storeThreadMain(inputqueue,stopEvent):
     with open("output.bin", "wb") as outputfile:
-        while( not stopEvent.is_set()):
+        while(False):
             packet = inputqueue.get(True, 1000)
             outputfile.write(packet)
 
-def captureThreadMain(dataSerial, onPacket):
-    print("Start listening on COM11")
-    buffer = []
-    while(not stopEvent.is_set()):
-        byte = dataSerial.read(1)
-        #print(byte)
-        buffer += byte
-        #Check if we received full packet
-        if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
-            print("packet")
-            onPacket(bytes(buffer))
-            buffer = buffer[-8:]
+def captureThreadMain(port):
+    print("Start listening on COM11",flush = True)
+    with serial.Serial(port, 921600) as dataSerial:
+        buffer = []
+        while(True):
+            byte = dataSerial.read(1)
+            #print(byte)
+            buffer += byte
+            #Check if we received full packet
+            if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
+                print(f"packet, size:{len(buffer)}", flush = True)
+                parseThreadMain(bytes(buffer))
+                buffer = buffer[-8:]
                     
-def parseThreadMain(inputqueue, stopEvent):
+def parseThreadMain(rawData):
 
-    #targets plots
-    fig, ax = plt.subplots(1, 5)
-    while not stopEvent.is_set():
-        rawData = inputqueue.get(True, 1000)
-        if(rawData == None):
-            return
-        try:
-            data = frame.parse(rawData)
-            for packet in data['packets']:
-                if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
-                    #print(packet['data'][0]['heatmap'])
-                    targets = {}
-                    for target in packet['data']:
-                        target['timestamp'] = datetime.datetime.now()
-                        targets[target['tid']] = target
+    if(rawData == None):
+        return
+    try:
+        data = frame.parse(rawData)
+        print("Packet:", flush=True)
+        for packet in data['packets']:
+            print("- type: {}".format(packet['type']))
+            if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
+                #print(packet['data'][0]['heatmap'])
+                targets = {}
+                for target in packet['data']:
+                    target['timestamp'] = datetime.datetime.now()
+                    targets[target['tid']] = target
 
-                    #print("location x:{} y:{}".format(target['posx'], target['posy']))
-                    if(len(targets) > 1):
-                        images = []
-                        fig.suptitle('Targets')
-                        i = 0
-                        normalizer = matplotlib.colors.Normalize()
-                        for target in targets:
-                            a = np.reshape(targets[target]['heatmap'],(10,10))
+                #print("location x:{} y:{}".format(target['posx'], target['posy']))
+                if(len(targets) > 1):
+                    image = np.zeros([400, 400])
+                    for target in targets:
 
-                            images.append(ax[i].imshow(a, cmap='hot', norm= normalizer, interpolation='nearest'))
-                            #ax[i].setTitle("x:{} y:{}".format(targets[target]['posx'], targets[target]['posy']))
-                            i += 1
-                        fig.colorbar(images[0])
-                            #plt.imshow(a, cmap='hot', norm= matplotlib.colors.Normalize(), interpolation='nearest')
-                            #plt.show()
-                            #print(a)
-                            
-                        plt.scatter([targets[x]['posx'] for x in targets], [targets[x]['posy'] for x in targets])
-        except StreamError:
-            print("bad packet")
+                        x = targets[target]['posx']
+                        y = targets[target]['posy']
+                        xindex = int((x+10) / 35 * 380 + 10)
+                        yindex = int(y / 35 * 380 + 10)
+                        a = np.reshape(targets[target]['heatmap'],(10,10))
+                        print("x:{} y:{}".format(xindex, yindex), flush=True)
+                        image[xindex-5:xindex+5, yindex-5:yindex+5] = a
+                        #imgView.setImage(image, autoRange=False, autoLevels=False)
+                    print("show", flush=True)
+                    #QtGui.QApplication.processEvents()
+            # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
+            #     print("heatmap, len = {}".format(packet['len']/4), flush=True)
+            #     heatmap.setImage(np.flip(np.reshape(packet['data'], (64,128)), 1))
+
+            if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value:
+                print(f"pointcloud, points: {(packet['len'] - 8) / 16}", flush="True")
+                x, y = pol2cart([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
+                #pointcloud.setData([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
+                pointcloud.setData(x, y)
 
 
-            
-#Set up reading and parsing threads
-writeQueue = queue.Queue()
-parseQueue = queue.Queue()
-stopEvent = threading.Event()
+    except StreamError:
+        print("bad packet")
 
-def storeAndParse(data):
-    writeQueue.put(data)
-    parseQueue.put(data)
-    
+imgView = None
 
-dataSerial = serial.Serial("COM11", 921600);
 
-captureThread =threading.Thread(target = captureThreadMain, args=[dataSerial, storeAndParse])
-#writeThread = threading.Thread(target = storeThreadMain, args=[writeQueue, stopEvent])
-parseThread = threading.Thread(target = parseThreadMain, args=[parseQueue, stopEvent])
+import pyqtgraph.multiprocess as mp
+#pg.mkQApp()
+proc = mp.QtProcess(processRequests=False)
+rpg = proc._import('pyqtgraph')
+#plotwin = rpg.plot()
+#imgView = rpg.show(np.random.rand(500,500))
+#heatmap = rpg.show(np.zeros((64,128)))
+pointcloudwin = rpg.plot()
+pointcloud = pointcloudwin.plot([1],[1], pen=None, symbol='o')
+pointcloudwin.setRange(xRange=[-0,10],yRange=[-2,2])
+print("test\n", flush=True)
 
-#Send UART commands to start the sensor
-startSensor()
+#startSensor()
 
 #Start processing threads
-captureThread.start()
+#captureThread.start()
 #writeThread.start()
-parseThread.start()
+#parseThread.start()
 
+captureThreadMain("COM11")
 

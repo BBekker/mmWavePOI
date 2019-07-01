@@ -268,6 +268,14 @@ void MmwDemo_mboxReadTask(UArg arg0, UArg arg1)
                         outputMessage.numTLVs += 1;
                     }
 
+                    //Add heatmap
+//                    uint32_t heatmapsize = gMmwMssMCB.mssDataPathObj.heatmapNumRows * gMmwMssMCB.mssDataPathObj.heatmapRowLen * sizeof(float);
+//                    if(heatmapsize > 0 && gMmwMssMCB.mssDataPathObj.heatmapAddress != NULL)
+//                    {
+//                        outputMessage.totalPacketLen += heatmapsize;
+//                        outputMessage.numTLVs += 1;
+//                    }
+
                     /* Calculate header checksum */
                     headerPtr = (uint16_t *)&outputMessage;
                     for(n=0, sum = 0; n < sizeof(MmwDemo_output_message_header)/sizeof(uint16_t); n++)
@@ -293,6 +301,23 @@ void MmwDemo_mboxReadTask(UArg arg0, UArg arg1)
                     }
                     //GPIO_toggle(SOC_XWR16XX_PINP5_PADBG);
 
+//                    if(gMmwMssMCB.mssDataPathObj.heatmapAddress != NULL && heatmapsize > 0)
+//                    {
+//                        MmwDemo_output_message_tl heatmapheader =
+//                            {
+//                             .type = MMWDEMO_OUTPUT_MSG_HEATMAP,
+//                             .length = heatmapsize,
+//                            };
+//                        UART_write(gMmwMssMCB.loggingUartHandle, (uint8_t *) &heatmapheader, sizeof(heatmapheader));
+//
+//                        //This write call seems to have some undocumented maximum size
+//                        for(int i = 0; i < gMmwMssMCB.mssDataPathObj.heatmapNumRows; i++)
+//                        {
+//                            uint8_t *cursor = ((uint8_t *) gMmwMssMCB.mssDataPathObj.heatmapAddress) + i * gMmwMssMCB.mssDataPathObj.heatmapRowLen * sizeof(float);
+//                            UART_write(gMmwMssMCB.loggingUartHandle, cursor, gMmwMssMCB.mssDataPathObj.heatmapRowLen * sizeof(float));
+//                        }
+//
+//                    }
 
                     gMmwMssMCB.mssDataPathObj.cycleLog.sendingToUARTTimeCurrInusec = ((float)(Cycleprofiler_getTimeStamp() - timeStart))/(float)R4F_CLOCK_MHZ;
                     if ((gMmwMssMCB.mssDataPathObj.cycleLog.sendingToUARTTimeCurrInusec > 0) && (gMmwMssMCB.mssDataPathObj.cycleLog.sendingToUARTTimeCurrInusec > gMmwMssMCB.mssDataPathObj.cycleLog.sendingToUARTTimeMaxInusec))
