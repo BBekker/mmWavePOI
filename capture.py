@@ -181,28 +181,28 @@ def parseThreadMain(rawData):
         print("Packet:", flush=True)
         for packet in data['packets']:
             print("- type: {}".format(packet['type']))
-            if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
-                #print(packet['data'][0]['heatmap'])
-                targets = {}
-                for target in packet['data']:
-                    target['timestamp'] = datetime.datetime.now()
-                    targets[target['tid']] = target
+            # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
+            #     #print(packet['data'][0]['heatmap'])
+            #     targets = {}
+            #     for target in packet['data']:
+            #         target['timestamp'] = datetime.datetime.now()
+            #         targets[target['tid']] = target
 
-                #print("location x:{} y:{}".format(target['posx'], target['posy']))
-                if(len(targets) > 1):
-                    image = np.zeros([400, 400])
-                    for target in targets:
+            #     #print("location x:{} y:{}".format(target['posx'], target['posy']))
+            #     if(len(targets) > 1):
+            #         image = np.zeros([400, 400])
+            #         for target in targets:
 
-                        x = targets[target]['posx']
-                        y = targets[target]['posy']
-                        xindex = int((x+10) / 35 * 380 + 10)
-                        yindex = int(y / 35 * 380 + 10)
-                        a = np.reshape(targets[target]['heatmap'],(10,10))
-                        print("x:{} y:{}".format(xindex, yindex), flush=True)
-                        image[xindex-5:xindex+5, yindex-5:yindex+5] = a
-                        #imgView.setImage(image, autoRange=False, autoLevels=False)
-                    print("show", flush=True)
-                    #QtGui.QApplication.processEvents()
+            #             x = targets[target]['posx']
+            #             y = targets[target]['posy']
+            #             xindex = int((x+10) / 35 * 380 + 10)
+            #             yindex = int(y / 35 * 380 + 10)
+            #             a = np.reshape(targets[target]['heatmap'],(10,10))
+            #             print("x:{} y:{}".format(xindex, yindex), flush=True)
+            #             image[xindex-5:xindex+5, yindex-5:yindex+5] = a
+            #             #imgView.setImage(image, autoRange=False, autoLevels=False)
+            #         print("show", flush=True)
+            #         #QtGui.QApplication.processEvents()
             # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
             #     print("heatmap, len = {}".format(packet['len']/4), flush=True)
             #     heatmap.setImage(np.flip(np.reshape(packet['data'], (64,128)), 1))
@@ -210,8 +210,10 @@ def parseThreadMain(rawData):
             if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value:
                 print(f"pointcloud, points: {(packet['len'] - 8) / 16}", flush="True")
                 x, y = pol2cart([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
+                vel = [x["doppler"] for x in packet['data']]
+                colors = [np.tanh([x['snr']/10,x['snr']/10,x['snr']/10,10000000]) for x in packet['data']]     #Brightness of the point is SNR
                 #pointcloud.setData([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
-                pointcloud.setData(x, y)
+                scatterplot.setData(pos=np.column_stack((x,y,vel)),color=np.array(colors))
 
 
     except StreamError:
@@ -224,15 +226,23 @@ import pyqtgraph.multiprocess as mp
 #pg.mkQApp()
 proc = mp.QtProcess(processRequests=False)
 rpg = proc._import('pyqtgraph')
+gl = proc._import('pyqtgraph.opengl')
 #plotwin = rpg.plot()
 #imgView = rpg.show(np.random.rand(500,500))
 #heatmap = rpg.show(np.zeros((64,128)))
-pointcloudwin = rpg.plot()
-pointcloud = pointcloudwin.plot([1],[1], pen=None, symbol='o')
-pointcloudwin.setRange(xRange=[-0,10],yRange=[-2,2])
-print("test\n", flush=True)
+view = gl.GLViewWidget()
+view.show()
+grid = gl.GLGridItem()
+scatterplot = gl.GLScatterPlotItem()
+#Draw the area we are viewing.
+background = gl.GLLinePlotItem(pos=np.array([[0,-10,0],[0,10,0], [25,10,0], [25,-10,0],[0,-10,0]]),color=(1,1,1,1), width=2, antialias=True, mode='line_strip')
 
-#startSensor()
+view.addItem(grid)
+view.addItem(background)
+view.addItem(scatterplot)
+
+#Send the startup commands to the sensor
+startSensor()
 
 #Start processing threads
 #captureThread.start()
