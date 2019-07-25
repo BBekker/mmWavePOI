@@ -7,12 +7,19 @@ import serial
 import time
 import datetime
 
+commandport = "/dev/ttyACM0"
+dataport = "/dev/ttyACM1"
 
 #Packet definition
 
 rangeFFTSize = 256
 dopplerFFTSize = 256
 antennas = 8
+
+labels = []
+datasamples = []
+currentsample = []
+packetsinsample = 0
 
 from enum import Enum
 class Message(Enum):
@@ -131,7 +138,7 @@ def parseData(stream, stopEvent):
 
 
 def startSensor():
-    with serial.Serial("COM10",115200, parity=serial.PARITY_NONE) as controlSerial:
+    with serial.Serial(commandport,115200, parity=serial.PARITY_NONE) as controlSerial:
         with open("customchirp.cfg", 'r') as configfile:
             for line in configfile:
                 print(">> " + line, flush = True)
@@ -141,6 +148,18 @@ def startSensor():
                 controlSerial.read(11) #prompt
                 time.sleep(0.01)
             print("sensor started")
+
+def addSample(data):
+    """
+        Add a sample of shape:
+        4xn: (range, azimuth, doppler, snr) * numpoints
+
+    """
+    out = np.empty([len(data), 4])
+    for i, d in enumerate(data):
+        out[i] = [d['range'], d['angle'], d['doppler'], d['snr']]
+    datasamples.append(out)
+    labels.append('testlabel')
 
             
 def matchArrays(a, b):
@@ -178,9 +197,9 @@ def parseThreadMain(rawData):
         return
     try:
         data = frame.parse(rawData)
-        print("Packet:", flush=True)
+        #print("Packet:", flush=True)
         for packet in data['packets']:
-            print("- type: {}".format(packet['type']))
+            #print("- type: {}".format(packet['type']))
             # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
             #     #print(packet['data'][0]['heatmap'])
             #     targets = {}
@@ -208,12 +227,21 @@ def parseThreadMain(rawData):
             #     heatmap.setImage(np.flip(np.reshape(packet['data'], (64,128)), 1))
 
             if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value:
-                print(f"pointcloud, points: {(packet['len'] - 8) / 16}", flush="True")
+                #print(f"pointcloud, points: {(packet['len'] - 8) / 16}", flush="True")
                 x, y = pol2cart([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
                 vel = [x["doppler"] for x in packet['data']]
-                colors = [np.tanh([x['snr']/10,x['snr']/10,x['snr']/10,10000000]) for x in packet['data']]     #Brightness of the point is SNR
+                colors = [(x['snr']/10,x['snr']/10,x['snr']/10) for x in packet['data']]     #Brightness of the point is SNR
                 #pointcloud.setData([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
                 scatterplot.setData(pos=np.column_stack((x,y,vel)),color=np.array(colors))
+
+                global currentsample, packetsinsample, datasamples
+                currentsample += packet['data']
+                packetsinsample += 1
+                if packetsinsample >= 10 and len(currentsample) > 50:
+                    addSample(currentsample)
+                    currentsample = []
+                    packetsinsample = 0
+                    print('new sample')
 
 
     except StreamError:
@@ -242,12 +270,12 @@ view.addItem(background)
 view.addItem(scatterplot)
 
 #Send the startup commands to the sensor
-startSensor()
+#startSensor()
 
 #Start processing threads
 #captureThread.start()
 #writeThread.start()
 #parseThread.start()
 
-captureThreadMain("COM11")
+captureThreadMain(dataport)
 
