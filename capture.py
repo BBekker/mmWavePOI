@@ -6,9 +6,12 @@ import numpy as np
 import serial
 import time
 import datetime
+import h5py
 
 commandport = "/dev/ttyACM0"
 dataport = "/dev/ttyACM1"
+
+f = h5py.File('dataset.hdf5', 'w')
 
 #Packet definition
 
