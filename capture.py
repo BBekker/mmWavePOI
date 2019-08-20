@@ -1,23 +1,30 @@
-import os
+import sys
 import io
 from construct import *
 import pyqtgraph as pg
 import numpy as np
 import serial
-import time
-import datetime
 import h5py
+from datetime import datetime
+import time
 
-commandport = "/dev/ttyACM0"
-dataport = "/dev/ttyACM1"
+# commandport = "/dev/ttyACM0"
+# dataport = "/dev/ttyACM1"
+commandport = "COM10"
+dataport = "COM11"
 
-f = h5py.File('dataset.hdf5', 'w')
+datasetName = "pointclouds"
+
+#Label for new samples
+label = 0
 
 #Packet definition
 
 rangeFFTSize = 256
 dopplerFFTSize = 256
 antennas = 8
+
+colormap = [[1.0,0.0,0.0,0.5],[1.0,1.0,0.0,.5],[0.0,1.0,0.0,.5],[0.0,1.0,1.0,.5],[1.0,0.0,1.0,.5]]
 
 labels = []
 datasamples = []
@@ -80,9 +87,8 @@ frame = Aligned(4,
                         "accX" / Float32l,
                         "accY"/ Float32l,
                         "ec" / Float32l[9],
-                        "g" / Float32l,
-                        "heatmap" / Float32l[100]
-                    )[lambda ctx: int((ctx.len-8) / (117*4))],
+                        "g" / Float32l
+                    )[lambda ctx: int((ctx.len-8) / (17*4))],
                  
                 Message.MMWDEMO_OUTPUT_MSG_TARGET_INDEX.value:
                     "indices" / Int8ul[this.len - 8],
@@ -158,11 +164,13 @@ def addSample(data):
         4xn: (range, azimuth, doppler, snr) * numpoints
 
     """
-    out = np.empty([len(data), 4])
+    out = np.zeros([1,50, 4])
     for i, d in enumerate(data):
-        out[i] = [d['range'], d['angle'], d['doppler'], d['snr']]
-    datasamples.append(out)
-    labels.append('testlabel')
+        if(i < 50):
+            out[0,i] = [d['range'], d['angle'], d['doppler'], d['snr']]
+    writeDataset(samples, out)
+    writeElement(labels, label)
+    writeElement(timestamps, datetime.timestamp(datetime.now()))
 
             
 def matchArrays(a, b):
@@ -173,12 +181,6 @@ def matchArrays(a, b):
         if a[i] != b[i]:
             return False
     return True 
-
-def storeThreadMain(inputqueue,stopEvent):
-    with open("output.bin", "wb") as outputfile:
-        while(False):
-            packet = inputqueue.get(True, 1000)
-            outputfile.write(packet)
 
 def captureThreadMain(port):
     print("Start listening on COM11",flush = True)
@@ -200,31 +202,11 @@ def parseThreadMain(rawData):
         return
     try:
         data = frame.parse(rawData)
-        #print("Packet:", flush=True)
         for packet in data['packets']:
-            #print("- type: {}".format(packet['type']))
-            # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
-            #     #print(packet['data'][0]['heatmap'])
-            #     targets = {}
-            #     for target in packet['data']:
-            #         target['timestamp'] = datetime.datetime.now()
-            #         targets[target['tid']] = target
+            if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
+                POIs = np.array([[x['posy'],x['posx'] * -1] for x in packet['data']])
+                scatter2.setData(pos=POIs, color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']]))
 
-            #     #print("location x:{} y:{}".format(target['posx'], target['posy']))
-            #     if(len(targets) > 1):
-            #         image = np.zeros([400, 400])
-            #         for target in targets:
-
-            #             x = targets[target]['posx']
-            #             y = targets[target]['posy']
-            #             xindex = int((x+10) / 35 * 380 + 10)
-            #             yindex = int(y / 35 * 380 + 10)
-            #             a = np.reshape(targets[target]['heatmap'],(10,10))
-            #             print("x:{} y:{}".format(xindex, yindex), flush=True)
-            #             image[xindex-5:xindex+5, yindex-5:yindex+5] = a
-            #             #imgView.setImage(image, autoRange=False, autoLevels=False)
-            #         print("show", flush=True)
-            #         #QtGui.QApplication.processEvents()
             # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
             #     print("heatmap, len = {}".format(packet['len']/4), flush=True)
             #     heatmap.setImage(np.flip(np.reshape(packet['data'], (64,128)), 1))
@@ -235,45 +217,67 @@ def parseThreadMain(rawData):
                 vel = [x["doppler"] for x in packet['data']]
                 colors = [(x['snr']/10,x['snr']/10,x['snr']/10) for x in packet['data']]     #Brightness of the point is SNR
                 #pointcloud.setData([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
-                scatterplot.setData(pos=np.column_stack((x,y,vel)),color=np.array(colors))
+                
+                scatterplot.setData(pos=np.column_stack((x,y * -1,vel)),color=np.array(colors))
 
-                global currentsample, packetsinsample, datasamples
-                currentsample += packet['data']
-                packetsinsample += 1
-                if packetsinsample >= 10 and len(currentsample) > 50:
-                    addSample(currentsample)
-                    currentsample = []
-                    packetsinsample = 0
-                    print('new sample')
+                addSample(packet['data'])
+                # global currentsample, packetsinsample, datasamples
+                # currentsample += packet['data']
+                # packetsinsample += 1
+                # if packetsinsample == 10 and len(currentsample) > 30:
+                #     addSample(currentsample)
+                #     currentsample = []
+                #     packetsinsample = 0
+                #     print('new sample')
+                # elif packetsinsample > 10:
+                #     #Too few points, probably nothing interesting to see
+                #     currentsample = []
+                #     packetsinsample = 0
 
 
     except StreamError:
         print("bad packet")
 
-imgView = None
+def writeDataset(dataset, data):
+    dataset.resize(dataset.shape[0] + data.shape[0], axis=0)
+    dataset[-data.shape[0]:] = data
 
+def writeElement(dataset, data):
+    dataset.resize(dataset.shape[0]+1,axis=0)
+    dataset[-1] = data
 
 import pyqtgraph.multiprocess as mp
-#pg.mkQApp()
+
 proc = mp.QtProcess(processRequests=False)
 rpg = proc._import('pyqtgraph')
 gl = proc._import('pyqtgraph.opengl')
-#plotwin = rpg.plot()
-#imgView = rpg.show(np.random.rand(500,500))
-#heatmap = rpg.show(np.zeros((64,128)))
 view = gl.GLViewWidget()
 view.show()
 grid = gl.GLGridItem()
 scatterplot = gl.GLScatterPlotItem()
+scatter2 = gl.GLScatterPlotItem(color = [1.0,0,0,0.2] , size = 50)
 #Draw the area we are viewing.
 background = gl.GLLinePlotItem(pos=np.array([[0,-10,0],[0,10,0], [25,10,0], [25,-10,0],[0,-10,0]]),color=(1,1,1,1), width=2, antialias=True, mode='line_strip')
 
 view.addItem(grid)
 view.addItem(background)
 view.addItem(scatterplot)
+view.addItem(scatter2)
+
+#Open a file to store data
+f = h5py.File(sys.argv[1], 'r+')
+try:
+    samples = f['/'+datasetName+'/samples']
+    labels = f['/'+datasetName+'/labels']
+    timestamps = f['/'+datasetName+'/timestamps']
+except KeyError as e:
+    samples = f.create_dataset('/'+datasetName+'/samples',(0, 50, 4), maxshape = (None, 50, 4))
+    labels = f.create_dataset('/'+datasetName+'/labels',(0,), maxshape = (None,),chunks=True)
+    timestamps = f.create_dataset('/'+datasetName+'/timestamps',(0,), maxshape = (None,),chunks=True)
 
 #Send the startup commands to the sensor
-#startSensor()
+
+startSensor()
 
 #Start processing threads
 #captureThread.start()

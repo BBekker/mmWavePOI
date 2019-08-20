@@ -1,0 +1,19 @@
+dfeDataOutputMode 1
+channelCfg 15 3 0
+adcCfg 2 1
+adcbufCfg <adc format> < iqswap> <chinterleave> <chriptresh>
+profileCfg 0 77 10 5.1 62 0 0 18.01 1 128 4000 0 0 30
+chirpCfg 0 0 0 0 0 0 0 1
+chirpCfg 1 1 0 0 0 0 0 2
+frameCfg 0 1 128 0 100 1 0
+lowPower 0 1
+guiMonitor <detectedObjects> <logMagRange> <rangeAzimuthHeatMap> <rangeDopplerHeatMap>
+cfarCfg <detMode> <discardLeft> <discardRight> <refWinSize1> <refWinSize2> <guardWinSize1> <guardWinSize2> <rangethre> <azimuthThre> <log2mag>
+doaCfg <angle in 0.1 deg> <resoliton in 0.001 deg> <gamma in 0.001> <clutter removal>
+SceneryParam <Left Wall> <Right Wall> <Bottom Exit Zone> <Upper Exit Zone>
+GatingParam <gating volume> <length> <width> <doppler>
+StateParam <det2act> <det2free> <act2free> <stat2free> <exit2free>
+AllocationParam <SNRs> <minimal velocity> <points> <in distance> <in velocity>
+VariationParam <height> <width> <doppler>
+trackingCfg <enable> <paramSet> <numPoints> <numTracks> <maxDoppler> <framePeriod>
+sensorStart
