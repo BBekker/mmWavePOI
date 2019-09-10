@@ -274,29 +274,7 @@ void MmwDemo_appTask(UArg arg0, UArg arg1)
             memcpy(targetList->target[n].ec, targetDescr[n].EC, sizeof(targetDescr[n].EC));
 
             targetList->target[n].g = targetDescr[n].G;
-//
-//            float spherical[3];
-//            cartesian2spherical(targetDescr[n].S, spherical);
-////
-////            //Todo: Convert to index
-//            int rangeidx = MAX(5, roundf(spherical[0] / gMmwMssMCB.mssDataPathObj.heatmapRangeRes));
-//            int rangesize = roundf(spherical[0] / gMmwMssMCB.mssDataPathObj.heatmapRangeRes);
-//            int angleidx = roundf(spherical[1] / ((gMmwMssMCB.mssDataPathObj.heatmapAngleRes /360) * 2*PI)) + gMmwMssMCB.mssDataPathObj.heatmapNumRows/2 ;
-//            System_printf("range %f: %d, angle %f: %d \n",spherical[0], rangeidx, spherical[1], angleidx);
-////
-////            //Copy local heatmap
-//            for(int i = -5; i < 5; i++)
-//            {
-//                if((i + angleidx) >= 0 && (i + angleidx) < gMmwMssMCB.mssDataPathObj.heatmapNumRows)
-//                {
-//
-//
-//                    memcpy(&targetList->target[n].heatmap[(i+5)*10],
-//                           &gMmwMssMCB.mssDataPathObj.heatmapAddress[(i + angleidx)*gMmwMssMCB.mssDataPathObj.heatmapRowLen + rangeidx - 5],
-//                           MAX(0,MIN(gMmwMssMCB.mssDataPathObj.heatmapRowLen - rangeidx - 5, 10)) * sizeof(float));
-//                }
-//
-//            }
+
         }
 
         if(tNum > 0)

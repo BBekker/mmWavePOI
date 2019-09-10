@@ -7,6 +7,9 @@ import serial
 import h5py
 from datetime import datetime
 import time
+import joblib
+import sklearn
+import classifier
 
 # commandport = "/dev/ttyACM0"
 # dataport = "/dev/ttyACM1"
@@ -16,7 +19,7 @@ dataport = "COM11"
 datasetName = "pointclouds"
 
 #Label for new samples
-label = 0
+label = sys.argv[2]
 
 #Packet definition
 
@@ -30,6 +33,8 @@ labels = []
 datasamples = []
 currentsample = []
 packetsinsample = 0
+
+model = joblib.load('model.joblib')
 
 from enum import Enum
 class Message(Enum):
@@ -169,7 +174,7 @@ def addSample(data):
         if(i < 50):
             out[0,i] = [d['range'], d['angle'], d['doppler'], d['snr']]
     writeDataset(samples, out)
-    writeElement(labels, label)
+    #writeElement(labels, label)
     writeElement(timestamps, datetime.timestamp(datetime.now()))
 
             
@@ -192,17 +197,44 @@ def captureThreadMain(port):
             buffer += byte
             #Check if we received full packet
             if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
-                print(f"packet, size:{len(buffer)}", flush = True)
+                #print(f"packet, size:{len(buffer)}", flush = True)
                 parseThreadMain(bytes(buffer))
                 buffer = buffer[-8:]
                     
+
+previous = {"header":{"frameNumber": -1}}
+def predict_targets(parsed):
+    global previous
+    #tracking lags one frame behind the pointcloud
+    print(previous['header']['frameNumber'], parsed['header']['frameNumber'], flush=True)
+    if previous['header']['frameNumber'] == parsed['header']['frameNumber'] - 1:
+
+        if Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value in parsed and Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value in previous:
+            for target in parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value]:
+                tid = target['tid']
+                #print(tid, parsed[Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value])
+                points = [[d['range'], d['angle'], d['doppler'], d['snr']] for i, d in enumerate(previous[Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value]) if parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_INDEX.value][i] == tid]
+                if(len(points) > 2):
+                    points = np.array([points])
+                    features = classifier.get_featurevector(points)
+                    pred = model.predict_proba(features)
+                    predid = np.argmax(pred)
+                    print(tid,predid, pred[0,predid], points.shape[1])
+    previous = parsed
+
+
+
 def parseThreadMain(rawData):
 
     if(rawData == None):
         return
     try:
         data = frame.parse(rawData)
+        parsed = {"header": data['header']}
+
         for packet in data['packets']:
+            parsed[packet['type']] = packet['data']
+        
             if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
                 POIs = np.array([[x['posy'],x['posx'] * -1] for x in packet['data']])
                 scatter2.setData(pos=POIs, color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']]))
@@ -233,6 +265,7 @@ def parseThreadMain(rawData):
                 #     #Too few points, probably nothing interesting to see
                 #     currentsample = []
                 #     packetsinsample = 0
+        predict_targets(parsed)
 
 
     except StreamError:
@@ -265,7 +298,7 @@ view.addItem(scatterplot)
 view.addItem(scatter2)
 
 #Open a file to store data
-f = h5py.File(sys.argv[1], 'r+')
+f = h5py.File(sys.argv[1]+datetime.now().strftime("%Y%m%d%H%M%S") + ".hdf5", 'w')
 try:
     samples = f['/'+datasetName+'/samples']
     labels = f['/'+datasetName+'/labels']
