@@ -13,7 +13,8 @@ datasets_config = [   #Filename               Class
     ("200819dataset.hdf5",       0),
     ("adult20190909154014.hdf5", 1),
     ("adult200919.hdf5",         1),
-    ("fiets20190909212034.hdf5", 2)
+    ("fiets20190909212034.hdf5", 2),
+    #("adultvalidation20190909213834.hdf5", 1),
 ]
 
 
@@ -142,26 +143,26 @@ def main():
     #set up SVM
 
     #Normalize our input values
-    scaler = StandardScaler()
-    scaler.fit(featurevecs)
-    featurevecs = scaler.transform(featurevecs)
+    # scaler = StandardScaler()
+    # scaler.fit(featurevecs)
+    # featurevecs = scaler.transform(featurevecs)
 
     #split up data
     
-    trainset = featurevecs[indices[:-2000],:]
-    trainlabels = labels[indices[:-2000]]
+    trainset = featurevecs[indices[:-4000],:]
+    trainlabels = labels[indices[:-4000]]
 
-    testset = featurevecs[indices[-2000:],:]
-    testlabels = labels[indices[-2000:]]
+    testset = featurevecs[indices[-4000:],:]
+    testlabels = labels[indices[-4000:]]
 
     #Train
     print("start train")
     #model = svm.SVC(kernel='rbf', gamma='auto', C = 0.95, class_weight='balanced', probability=True)
-    model = nn.MLPClassifier((100,100), max_iter=250, alpha=0.2)
+    model = nn.MLPClassifier((100,100,100,100), max_iter=300, alpha=0.10)
     x = trainset
     y = trainlabels
-    #model.fit(x, y)
-    model = load('model.joblib') #Use model from previous run instead
+    model.fit(x, y)
+    #model = load('model.joblib') #Use model from previous run instead
 
     trainout = model.predict(x)
     testout = model.predict(testset)
@@ -184,7 +185,7 @@ def main():
 
 
     #graph(featurevecs[indices[:-500],4], featurevecs[indices[:-500],5], featurevecs[indices[:-500],1], trainout)
-    dump(model, 'model.joblib')
+    #dump(model, 'model.joblib')
 
     # numcorrect
     # for i in range(len(testout)):

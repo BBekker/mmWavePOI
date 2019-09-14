@@ -35,7 +35,6 @@ currentsample = []
 packetsinsample = 0
 
 model = joblib.load('model.joblib')
-classes = ["child", "adult", "bicyclist"]
 
 from enum import Enum
 class Message(Enum):
@@ -202,15 +201,6 @@ def captureThreadMain(port):
                 parseThreadMain(bytes(buffer))
                 buffer = buffer[-8:]
                     
-predictions = np.ones((10,3,10))/3 #[10,3,10] tensor
-def addPrediction(id, prediction):
-    for i in range(9,0, -1):
-        predictions[id, :,i] = predictions[id,:,i-1]
-    predictions[id,:,0] = prediction
-    return getPrediction(id)
-
-def getPrediction(id):
-    return np.mean(predictions[id, :, :], axis=1)
 
 previous = {"header":{"frameNumber": -1}}
 def predict_targets(parsed):
@@ -220,13 +210,7 @@ def predict_targets(parsed):
     if previous['header']['frameNumber'] == parsed['header']['frameNumber'] - 1:
 
         if Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value in parsed and Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value in previous:
-            
-            # #clear target labels
-            # for item in textitems:
-            #     item.setText("",  _callSync='off')
-
-            #Try to identify the targets
-            for i, target in enumerate(parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value]):
+            for target in parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value]:
                 tid = target['tid']
                 #print(tid, parsed[Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value])
                 points = [[d['range'], d['angle'], d['doppler'], d['snr']] for i, d in enumerate(previous[Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value]) if parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_INDEX.value][i] == tid]
@@ -234,10 +218,8 @@ def predict_targets(parsed):
                     points = np.array([points])
                     features = classifier.get_featurevector(points)
                     pred = model.predict_proba(features)
-                    pred = addPrediction(tid, pred[0,:]) #LPF
                     predid = np.argmax(pred)
-                    print(tid,predid, pred[predid], points.shape[1])
-                    textitems[i].setText(f"{int(pred[predid]*100):3}% {classes[predid]}",  _callSync='off')
+                    print(tid,predid, pred[0,predid], points.shape[1])
     previous = parsed
 
 
@@ -254,23 +236,21 @@ def parseThreadMain(rawData):
             parsed[packet['type']] = packet['data']
         
             if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
-                POIs = np.array([[x['posx'],x['posy']] for x in packet['data']])
+                POIs = np.array([[x['posy'],x['posx'] * -1] for x in packet['data']])
                 scatter2.setData(pos=POIs, color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']]))
-                plot2.setData(POIs,  _callSync='off')
-                for i in range(POIs.shape[0]):
-                    textitems[i].setPos(POIs[i,0], POIs[i,1])
+
             # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
             #     print("heatmap, len = {}".format(packet['len']/4), flush=True)
             #     heatmap.setImage(np.flip(np.reshape(packet['data'], (64,128)), 1))
 
             if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value:
                 #print(f"pointcloud, points: {(packet['len'] - 8) / 16}", flush="True")
-                y, x = pol2cart([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
+                x, y = pol2cart([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
                 vel = [x["doppler"] for x in packet['data']]
                 colors = [(x['snr']/10,x['snr']/10,x['snr']/10) for x in packet['data']]     #Brightness of the point is SNR
                 #pointcloud.setData([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
                 
-                scatterplot.setData(pos=np.column_stack((x,y,vel)),color=np.array(colors))
+                scatterplot.setData(pos=np.column_stack((x,y * -1,vel)),color=np.array(colors))
 
                 addSample(packet['data'])
                 # global currentsample, packetsinsample, datasamples
@@ -310,24 +290,12 @@ grid = gl.GLGridItem()
 scatterplot = gl.GLScatterPlotItem()
 scatter2 = gl.GLScatterPlotItem(color = [1.0,0,0,0.2] , size = 50)
 #Draw the area we are viewing.
-background = gl.GLLinePlotItem(pos=np.array([[-5,0,0],[5,0,0], [10,25,0], [-10,25,0],[-5,0,0]]),color=(1,1,1,1), width=2, antialias=True, mode='line_strip')
+background = gl.GLLinePlotItem(pos=np.array([[0,-10,0],[0,10,0], [25,10,0], [25,-10,0],[0,-10,0]]),color=(1,1,1,1), width=2, antialias=True, mode='line_strip')
 
 view.addItem(grid)
 view.addItem(background)
 view.addItem(scatterplot)
 view.addItem(scatter2)
-
-
-proc2 = mp.QtProcess(processRequests=False)
-rpg2 = proc2._import('pyqtgraph')
-plotwindow2 = rpg2.plot()
-plot2 = plotwindow2.plot( pen=None, symbol='o')
-plotwindow2.setRange(xRange=[-10,10], yRange=[0,25])
-
-textitems = [rpg2.TextItem(text="test") for i in range(10)]
-for x in textitems:
-    plotwindow2.addItem(x)
-
 
 #Open a file to store data
 f = h5py.File(sys.argv[1]+datetime.now().strftime("%Y%m%d%H%M%S") + ".hdf5", 'w')
