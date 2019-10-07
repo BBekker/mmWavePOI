@@ -1,6 +1,5 @@
 import sys
 import io
-from construct import *
 import pyqtgraph as pg
 import numpy as np
 import serial
@@ -10,6 +9,8 @@ import time
 import joblib
 import sklearn
 import classifier
+import lib.parser as parser
+import msgpack
 
 # commandport = "/dev/ttyACM0"
 # dataport = "/dev/ttyACM1"
@@ -19,113 +20,24 @@ dataport = "COM11"
 datasetName = "pointclouds"
 
 #Label for new samples
-label = sys.argv[2]
 
 #Packet definition
 
-rangeFFTSize = 256
-dopplerFFTSize = 256
-antennas = 8
 
-colormap = [[1.0,0.0,0.0,0.5],[1.0,1.0,0.0,.5],[0.0,1.0,0.0,.5],[0.0,1.0,1.0,.5],[1.0,0.0,1.0,.5]]
+colormap = [[1.0,0.0,0.0,0.8],[1.0,1.0,0.0,.8],[0.0,1.0,0.0,.8],[0.0,1.0,1.0,.8],[1.0,0.0,1.0,.8]]
 
 labels = []
 datasamples = []
 currentsample = []
 packetsinsample = 0
 
-model = joblib.load('model.joblib')
-classes = ["child", "adult", "bicyclist"]
-
-from enum import Enum
-class Message(Enum):
-    MMWDEMO_OUTPUT_MSG_DETECTED_POINTS = 1
-    MMWDEMO_OUTPUT_MSG_RANGE_PROFILE = 2 
-    MMWDEMO_OUTPUT_MSG_NOISE_PROFILE = 3
-    MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP = 4
-    MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP = 5
-    MMWDEMO_OUTPUT_MSG_POINT_CLOUD = 6
-    MMWDEMO_OUTPUT_MSG_TARGET_LIST = 7
-    MMWDEMO_OUTPUT_MSG_TARGET_INDEX = 8
-    MMWDEMO_OUTPUT_MSG_STATS = 9
-    MMWDEMO_OUTPUT_MSG_HEATMAP = 10
-    MMWDEMO_OUTPUT_MSG_MAX = 11
-    
-    
-frame = Aligned(4,
-    Struct(
-    #Find sync bytes by looping over untill we find the magic word
-    "sync" / RepeatUntil(lambda x, lst, ctx : lst[-8:] == [0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], Byte),
-    "header" / Struct(
-        "version" / Int32ul,
-        'platform' / Int32ul, 
-        'timestamp' / Int32ul,
-        'totalPacketLen' / Int32ul, 
-        'frameNumber' / Int32ul, 
-        'subframeNumber' / Int32ul,
-        'chirpProcessingMargin' / Int32ul, 
-        'frameProcessingMargin' / Int32ul, 
-        'trackingProcessingTime' / Int32ul,
-        'uartSendingTime' / Int32ul,
-        'numTLVs' / Int16ul, 
-        'checksum' / Int16ul,
-    ),
-    "packets" / Struct(
-             "type" / Int32ul,
-             "len" / Int32ul,
-             "data" / Switch(this.type,
-                {
-                Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value: 
-                    "objects" / Struct(
-                        "range" / Float32l,
-                        "angle" / Float32l,
-                        "doppler" / Float32l,
-                        "snr" / Float32l,
-                    )[lambda ctx: int((ctx.len - 8) / 16)],
-                
-                Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value: 
-                    "targets" / Struct(
-                        "tid" / Int32ul,
-                        "posx" / Float32l,
-                        "posy" / Float32l,
-                        "velX" / Float32l,
-                        "velY" / Float32l,
-                        "accX" / Float32l,
-                        "accY"/ Float32l,
-                        "ec" / Float32l[9],
-                        "g" / Float32l
-                    )[lambda ctx: int((ctx.len-8) / (17*4))],
-                 
-                Message.MMWDEMO_OUTPUT_MSG_TARGET_INDEX.value:
-                    "indices" / Int8ul[this.len - 8],
-                    
-                Message.MMWDEMO_OUTPUT_MSG_NOISE_PROFILE.value: 
-                    Array(rangeFFTSize, Int16ul),
-                    
-                Message.MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP.value: 
-                    Array(rangeFFTSize * antennas, Struct("Img" / Int16sl, "Re" / Int16sl)),
-                    
-                Message.MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP.value: 
-                    Array(rangeFFTSize * dopplerFFTSize, Int16ul),
-                    
-                Message.MMWDEMO_OUTPUT_MSG_STATS.value: 
-                    Struct(
-                    "interFrameProcessingTime" / Int32ul,
-                    "transmitOutputTime" / Int32ul,
-                    "interFrameProcessingMargin" / Int32ul,
-                    "interChirpProcessingMargin" / Int32ul,
-                    "activeFrameCPULoad" / Int32ul,
-                    "interFrameCPULoad" / Int32ul
-                ),
-
-                Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
-                    Float32l[lambda ctx: int(ctx.len / 4)],
-                }
-                , default=Array(this.len, Byte))
-         )[this.header.numTLVs] 
-    )
-)
-
+scaler = joblib.load('scaler.joblib')
+#model = joblib.load('model_logistic.joblib')
+#model = joblib.load('model_norandom.joblib')
+#model = joblib.load('model_logistic.joblib')
+model = joblib.load('model_svc.joblib')
+classes = ["child", "adult", "bicyclist"]#, "random"]
+n_classes = len(classes)
 
 def cart2pol(x, y):
     rho = np.sqrt(x**2 + y**2)
@@ -137,19 +49,7 @@ def pol2cart(rho, phi):
     y = rho * np.sin(phi)
     return(x, y)
 
-def parseData(stream, stopEvent):
 
-    dataSerial = serial.Serial(stream, 921600)
-    while True:
-        buffer += dataSerial.read(1)
-        outputfile.write(bytes(buffer[-1:]))
-        if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
-            try:
-                data = frame.parse(bytes(buffer))
-                handleData(data)
-            except StreamError:
-                print("streamerror, streamsize: {}".format(buffer))
-            buffer = buffer[-8:]
 
 
 def startSensor():
@@ -188,23 +88,13 @@ def matchArrays(a, b):
             return False
     return True 
 
-def captureThreadMain(port):
-    print("Start listening on COM11",flush = True)
-    with serial.Serial(port, 921600) as dataSerial:
-        buffer = []
-        while(True):
-            byte = dataSerial.read(1)
-            #print(byte)
-            buffer += byte
-            #Check if we received full packet
-            if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
-                #print(f"packet, size:{len(buffer)}", flush = True)
-                parseThreadMain(bytes(buffer))
-                buffer = buffer[-8:]
                     
-predictions = np.ones((10,3,10))/3 #[10,3,10] tensor
+#Tracking and predicting
+max_targets = 15
+target_samples = [0] * max_targets
+predictions = np.ones((max_targets,n_classes,20))/n_classes #[max_targets,3,10] tensor
 def addPrediction(id, prediction):
-    for i in range(9,0, -1):
+    for i in range(19,0, -1):
         predictions[id, :,i] = predictions[id,:,i-1]
     predictions[id,:,0] = prediction
     return getPrediction(id)
@@ -212,92 +102,60 @@ def addPrediction(id, prediction):
 def getPrediction(id):
     return np.mean(predictions[id, :, :], axis=1)
 
-previous = {"header":{"frameNumber": -1}}
-def predict_targets(parsed):
-    global previous
-    #tracking lags one frame behind the pointcloud
-    print(previous['header']['frameNumber'], parsed['header']['frameNumber'], flush=True)
-    if previous['header']['frameNumber'] == parsed['header']['frameNumber'] - 1:
 
-        if Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value in parsed and Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value in previous:
-            
-            # #clear target labels
-            # for item in textitems:
-            #     item.setText("",  _callSync='off')
-
-            #Try to identify the targets
-            for i, target in enumerate(parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value]):
-                tid = target['tid']
-                #print(tid, parsed[Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value])
-                points = [[d['range'], d['angle'], d['doppler'], d['snr']] for i, d in enumerate(previous[Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value]) if parsed[Message.MMWDEMO_OUTPUT_MSG_TARGET_INDEX.value][i] == tid]
-                if(len(points) > 2):
-                    points = np.array([points])
+def predict_targets(frame):
+    for tid in range(max_targets):
+        tid_active = False
+        for cluster in frame.clusters:
+            if tid == cluster.tid:
+               tid_active = True
+               if(len(cluster.points) > 2):
+                    points = np.array([cluster.getPoints()])
                     features = classifier.get_featurevector(points)
+                    features = scaler.transform(features) #Batch norm
                     pred = model.predict_proba(features)
                     pred = addPrediction(tid, pred[0,:]) #LPF
-                    predid = np.argmax(pred)
-                    print(tid,predid, pred[predid], points.shape[1])
-                    textitems[i].setText(f"{int(pred[predid]*100):3}% {classes[predid]}",  _callSync='off')
-    previous = parsed
+                    target_samples[tid] += 1
+                    classid = np.argmax(pred)
+                    print(tid,classid, pred[classid], points.shape[1])
+                    if target_samples[tid] > 3:
+                        textitems[tid].setPos(cluster.info['posx'], cluster.info['posy'])
+                        textitems[tid].setText(f"{int(pred[classid]*100):3}% {classes[classid]}",  _callSync='off')
+        #if we didnt find the TID, then remove the id
+        if tid_active == False and target_samples[tid] > 0:
+            print(f"clear {tid}")
+            textitems[tid].setText("",  _callSync='off')
+            target_samples[tid] = 0
 
+def visualizeFrame(frame):
+    #Targets
+    #print(frame.clusters)
+    POIs = np.array([[cluster.info['posx'],cluster.info['posy']] for cluster in frame.clusters])
+    scatter2.setData(pos=POIs) #, color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']]))
+    plot2.setData(POIs,  _callSync='off')
 
+    #Point cloud
+    points = []
+    colors = []
+    for cluster in frame.clusters:
+        for point in cluster.points:
+            y, x = pol2cart(point['range'], point['angle'])
+            vel = point['doppler']
+            colors.append(colormap[cluster.info['tid'] % (len(colormap)-1)])
+            points.append(np.array([x,y,vel]))
 
-def parseThreadMain(rawData):
+    #unclustered points
+    for point in frame.points:
+        y, x = pol2cart(point['range'], point['angle'])
+        vel = point['doppler']
+        colors.append([0,0,0,.5])
+        points.append(np.array([x, y, vel]))
 
-    if(rawData == None):
-        return
-    try:
-        data = frame.parse(rawData)
-        parsed = {"header": data['header']}
+    #[print(c.points, flush=True) for c in frame.clusters]
+    points = np.array(points)
+    scatterplot.setData(pos=points,color=np.array(colors), _callSync='off')
 
-        for packet in data['packets']:
-            parsed[packet['type']] = packet['data']
-        
-            if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_TARGET_LIST.value :
-                POIs = np.array([[x['posx'],x['posy']] for x in packet['data']])
-                scatter2.setData(pos=POIs, color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']]))
-                plot2.setData(POIs,  _callSync='off')
-                for i in range(POIs.shape[0]):
-                    textitems[i].setPos(POIs[i,0], POIs[i,1])
-            # if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_HEATMAP.value:
-            #     print("heatmap, len = {}".format(packet['len']/4), flush=True)
-            #     heatmap.setImage(np.flip(np.reshape(packet['data'], (64,128)), 1))
-
-            if packet['type'] == Message.MMWDEMO_OUTPUT_MSG_POINT_CLOUD.value:
-                #print(f"pointcloud, points: {(packet['len'] - 8) / 16}", flush="True")
-                y, x = pol2cart([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
-                vel = [x["doppler"] for x in packet['data']]
-                colors = [(x['snr']/10,x['snr']/10,x['snr']/10) for x in packet['data']]     #Brightness of the point is SNR
-                #pointcloud.setData([x["range"] for x in packet['data']], [x['angle'] for x in packet['data']])
-                
-                scatterplot.setData(pos=np.column_stack((x,y,vel)),color=np.array(colors))
-
-                addSample(packet['data'])
-                # global currentsample, packetsinsample, datasamples
-                # currentsample += packet['data']
-                # packetsinsample += 1
-                # if packetsinsample == 10 and len(currentsample) > 30:
-                #     addSample(currentsample)
-                #     currentsample = []
-                #     packetsinsample = 0
-                #     print('new sample')
-                # elif packetsinsample > 10:
-                #     #Too few points, probably nothing interesting to see
-                #     currentsample = []
-                #     packetsinsample = 0
-        predict_targets(parsed)
-
-
-    except StreamError:
-        print("bad packet")
-
-def writeDataset(dataset, data):
-    dataset.resize(dataset.shape[0] + data.shape[0], axis=0)
-    dataset[-data.shape[0]:] = data
-
-def writeElement(dataset, data):
-    dataset.resize(dataset.shape[0]+1,axis=0)
-    dataset[-1] = data
+# SET UP GRAPHING
 
 import pyqtgraph.multiprocess as mp
 
@@ -324,9 +182,11 @@ plotwindow2 = rpg2.plot()
 plot2 = plotwindow2.plot( pen=None, symbol='o')
 plotwindow2.setRange(xRange=[-10,10], yRange=[0,25])
 
-textitems = [rpg2.TextItem(text="test") for i in range(10)]
+textitems = [rpg2.TextItem(text="test") for i in range(max_targets)]
 for x in textitems:
     plotwindow2.addItem(x)
+
+#END OF GRAPHING
 
 
 #Open a file to store data
@@ -340,14 +200,22 @@ except KeyError as e:
     labels = f.create_dataset('/'+datasetName+'/labels',(0,), maxshape = (None,),chunks=True)
     timestamps = f.create_dataset('/'+datasetName+'/timestamps',(0,), maxshape = (None,),chunks=True)
 
-#Send the startup commands to the sensor
+def captureThreadMain(port):
+    print("Start listening on COM11",flush = True)
+    with serial.Serial(port, 921600) as dataSerial:
+        buffer = []
+        while(True):
+            byte = dataSerial.read(1)
+            #print(byte)
+            buffer += byte
+            #Check if we received full packet
+            if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
+                #print(f"packet, size:{len(buffer)}", flush = True)
+                frame = parser.parseFrame(bytes(buffer))
+                if frame != None:
+                    visualizeFrame(frame)
+                    predict_targets(frame)
+                buffer = buffer[-8:]
 
 startSensor()
-
-#Start processing threads
-#captureThread.start()
-#writeThread.start()
-#parseThread.start()
-
 captureThreadMain(dataport)
-
