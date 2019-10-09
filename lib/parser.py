@@ -1,6 +1,7 @@
 from enum import Enum
 from construct import *
 import numpy as np
+from datetime import datetime
 
 rangeFFTSize = 256
 dopplerFFTSize = 256
@@ -119,11 +120,16 @@ class Cluster:
     def getPoints(self):
         return np.array([[d['range'], d['angle'], d['doppler'], d['snr']] for d in self.points])
 
+    def toDict(self):
+        return {"tid": self.tid,  "class": 0, "points": self.getPoints()}
+
 class ParsedFrame:
 
-    def __init__(self):
+    def __init__(self, fn):
         self.clusters = []
+        self.frameNumber = fn
         self.points = [] #Unclusterd points
+        self.timestamp = datetime.now()
 
     def newCluster(self, tid):
         c = Cluster(tid)
@@ -133,23 +139,31 @@ class ParsedFrame:
     def addPoint(self, point):
         self.points.append(point)
 
+    def toDict(self):
+        return {"frameNumber": self.frameNumber,
+                "timestamp": self.timestamp,
+                "clusters": [c.toDict() for c in self.clusters]}
+
 
 
 previousFrame = None
 def parseFrame(rawData):
     global previousFrame
+
+    parsedFrame = None
     if(rawData == None):
         return None
     try:
         frame = frameParser.parse(rawData)
+
         if previousFrame != None and previousFrame['header']['frameNumber'] == (frame['header']['frameNumber']-1):
-            parsedFrame = ParsedFrame()
+            parsedFrame = ParsedFrame(frame['header']['frameNumber'])
             targetList = getPacket(frame, Message.TARGET_LIST)
             targetIndices = getPacket(frame, Message.TARGET_INDEX)
             pointCloud = getPacket(previousFrame, Message.POINT_CLOUD)
 
-            print(len(targetIndices), targetIndices)
-            print(len(pointCloud))
+            # print(len(targetIndices), targetIndices)
+            # print(len(pointCloud))
 
             #print(targetList, flush=True)
             for target in targetList:
@@ -163,10 +177,12 @@ def parseFrame(rawData):
             #Add points without a cluster
             for targetIndex in range(len(targetIndices)):
                 if targetIndices[targetIndex] >= 250:
-                    parsedFrame.addPoint(pointCloud[targetIndex])
-            return parsedFrame
+                    parsedFrame.addPoint(pointCloud[targetIndex])       
+        else:
+            print("Frame skipped!", flush=True)
         previousFrame = frame
     except StreamError:
         print("bad packet")
         previousFrame = None
-    return None
+
+    return parsedFrame

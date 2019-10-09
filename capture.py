@@ -11,6 +11,7 @@ import sklearn
 import classifier
 import lib.parser as parser
 import msgpack
+import msgpack_numpy
 
 # commandport = "/dev/ttyACM0"
 # dataport = "/dev/ttyACM1"
@@ -63,20 +64,6 @@ def startSensor():
                 controlSerial.read(11) #prompt
                 time.sleep(0.01)
             print("sensor started")
-
-def addSample(data):
-    """
-        Add a sample of shape:
-        4xn: (range, azimuth, doppler, snr) * numpoints
-
-    """
-    out = np.zeros([1,50, 4])
-    for i, d in enumerate(data):
-        if(i < 50):
-            out[0,i] = [d['range'], d['angle'], d['doppler'], d['snr']]
-    writeDataset(samples, out)
-    #writeElement(labels, label)
-    writeElement(timestamps, datetime.timestamp(datetime.now()))
 
             
 def matchArrays(a, b):
@@ -182,6 +169,13 @@ plotwindow2 = rpg2.plot()
 plot2 = plotwindow2.plot( pen=None, symbol='o')
 plotwindow2.setRange(xRange=[-10,10], yRange=[0,25])
 
+a = 0
+
+def mouseCallback(event):
+    a +=1 
+proxy = mp.proxy(mouseCallback, callSync='off', autoProxy=True)
+plot2.scene().sigMouseClicked.connect(proxy)
+
 textitems = [rpg2.TextItem(text="test") for i in range(max_targets)]
 for x in textitems:
     plotwindow2.addItem(x)
@@ -190,15 +184,21 @@ for x in textitems:
 
 
 #Open a file to store data
-f = h5py.File(sys.argv[1]+datetime.now().strftime("%Y%m%d%H%M%S") + ".hdf5", 'w')
-try:
-    samples = f['/'+datasetName+'/samples']
-    labels = f['/'+datasetName+'/labels']
-    timestamps = f['/'+datasetName+'/timestamps']
-except KeyError as e:
-    samples = f.create_dataset('/'+datasetName+'/samples',(0, 50, 4), maxshape = (None, 50, 4))
-    labels = f.create_dataset('/'+datasetName+'/labels',(0,), maxshape = (None,),chunks=True)
-    timestamps = f.create_dataset('/'+datasetName+'/timestamps',(0,), maxshape = (None,),chunks=True)
+#f = h5py.File(sys.argv[1]+datetime.now().strftime("%Y%m%d%H%M%S") + ".hdf5", 'w')
+# try:
+#     samples = f['/'+datasetName+'/samples']
+#     labels = f['/'+datasetName+'/labels']
+#     timestamps = f['/'+datasetName+'/timestamps']
+# except KeyError as e:
+#     samples = f.create_dataset('/'+datasetName+'/samples',(0, 50, 4), maxshape = (None, 50, 4))
+#     labels = f.create_dataset('/'+datasetName+'/labels',(0,), maxshape = (None,),chunks=True)
+#     timestamps = f.create_dataset('/'+datasetName+'/timestamps',(0,), maxshape = (None,),chunks=True)
+
+msgpack_numpy.patch()
+outputfile = open(sys.argv[1]+datetime.now().strftime("%Y%m%d%H%M%S") + ".msgpack", 'a+b')
+def store_data(frame):
+    packed = msgpack.packb(frame.toDict(), use_bin_type=True)
+    outputfile.write(packed)
 
 def captureThreadMain(port):
     print("Start listening on COM11",flush = True)
@@ -215,7 +215,10 @@ def captureThreadMain(port):
                 if frame != None:
                     visualizeFrame(frame)
                     predict_targets(frame)
+                    store_data(frame)
                 buffer = buffer[-8:]
 
-startSensor()
-captureThreadMain(dataport)
+#startSensor()
+#captureThreadMain(dataport)
+
+time.sleep(10000)

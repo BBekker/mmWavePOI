@@ -2,3 +2,6 @@ Debug/
 .launches/
 .settings/
 .*/
+__pycache__/
+*.py[cod]
+GUI/venv/
