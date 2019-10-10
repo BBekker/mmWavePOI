@@ -26,15 +26,21 @@ class MyWidget(QtWidgets.QWidget):
 
         self.button.clicked.connect(self.magicExecutor)
 
+        self.graphscontainer = QtWidgets.QHBoxLayout()
+
         self.plotwindow = pg.PlotWidget()
         self.plotwindow.plot(np.random.rand((100)))
 
+
         def mouseMoved(event):
             pos = event
-            self.text.setText(f"x:{pos.x()}, y:{pos.y()}")
+            localpoint = self.plotwindow.getViewBox().mapSceneToView(pos)
+            self.text.setText(f"x:{localpoint.x()}, y:{localpoint.y()}")
 
         self.plotwindow.scene().sigMouseMoved.connect(mouseMoved)
-        self.layout.addWidget(self.plotwindow)
+        self.graphscontainer.addWidget(self.plotwindow)
+        self.plotwindow.sizeHint = QtCore.QSize(100,100)
+
 
         self.glview = pgl.GLViewWidget()
         grid = pgl.GLGridItem()
@@ -44,11 +50,16 @@ class MyWidget(QtWidgets.QWidget):
         background = pgl.GLLinePlotItem(pos=np.array([[-5, 0, 0], [5, 0, 0], [10, 25, 0], [-10, 25, 0], [-5, 0, 0]]),
                                        color=(1, 1, 1, 1), width=2, antialias=True, mode='line_strip')
 
-        self.layout.addWidget(self.glview)
         self.glview.addItem(grid)
         self.glview.addItem(background)
         self.glview.addItem(scatterplot)
         self.glview.addItem(scatter2)
+        self.graphscontainer.addWidget(self.glview)
+
+        self.glview.setSizePolicy(self.plotwindow.sizePolicy())
+
+        self.layout.addLayout(self.graphscontainer)
+
 
 
 
