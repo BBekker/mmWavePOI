@@ -6,8 +6,6 @@ import sys
 import numpy as np
 from matplotlib import pyplot as plt
 from joblib import dump, load
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import chi2
 from sklearn.metrics import f1_score
 from lib.classifier import *
 from lib.confusionMatrix import *

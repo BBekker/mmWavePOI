@@ -9,7 +9,7 @@ import time
 import joblib
 import sklearn
 import classifier
-import lib.parser as parser
+import lib.frameParser as parser
 import msgpack
 import msgpack_numpy
 
@@ -218,7 +218,7 @@ def captureThreadMain(port):
                     store_data(frame)
                 buffer = buffer[-8:]
 
-#startSensor()
-#captureThreadMain(dataport)
+if __name__ == "__main__":
 
-time.sleep(10000)
+    startSensor()
+    captureThreadMain(dataport)
