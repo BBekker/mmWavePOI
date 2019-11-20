@@ -33,9 +33,9 @@ frameParser = Aligned(4,
         'frameNumber' / Int32ul, 
         'subframeNumber' / Int32ul,
         'chirpProcessingMargin' / Int32ul, 
-        'frameProcessingMargin' / Int32ul, 
-        'trackingProcessingTime' / Int32ul,
+        'frameProcessingMargin' / Int32ul,
         'uartSendingTime' / Int32ul,
+        'trackingProcessingTime' / Int32ul,
         'numTLVs' / Int16ul, 
         'checksum' / Int16ul,
     ),
@@ -88,7 +88,7 @@ frameParser = Aligned(4,
                 ),
 
                 Message.HEATMAP:
-                    Float32l[lambda ctx: int(ctx.len / 4)],
+                    Float32l[lambda ctx: int((ctx.len - 8) / 4)],
                 }
                 , default=Array(this.len, Byte))
          )[this.header.numTLVs] 
@@ -165,7 +165,6 @@ def parseFrame(rawData):
         return None
     try:
         frame = frameParser.parse(rawData)
-
         if previousFrame != None and previousFrame['header']['frameNumber'] == (frame['header']['frameNumber']-1):
             parsedFrame = ParsedFrame(frame['header']['frameNumber'])
             targetList = getPacket(frame, Message.TARGET_LIST)

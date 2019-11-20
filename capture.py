@@ -200,6 +200,8 @@ def store_data(frame):
     packed = msgpack.packb(frame.toDict(), use_bin_type=True)
     outputfile.write(packed)
 
+#finds packets to send to parser
+#It always lags behind, as it looks for the start of a next packet before sending the entire old packet.
 def captureThreadMain(port):
     print("Start listening on COM11",flush = True)
     with serial.Serial(port, 921600) as dataSerial:
@@ -208,7 +210,8 @@ def captureThreadMain(port):
             byte = dataSerial.read(1)
             #print(byte)
             buffer += byte
-            #Check if we received full packet
+
+            #Check if we received the start of a new packet.
             if matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], buffer[-8:]):
                 #print(f"packet, size:{len(buffer)}", flush = True)
                 frame = parser.parseFrame(bytes(buffer))

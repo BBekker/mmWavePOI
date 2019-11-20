@@ -11,11 +11,16 @@ import serial
 from lib.util import *
 import joblib
 from lib.POI import POITracker
+from datetime import datetime
+import construct
 
-commandport = "COM10"
-dataport = "COM11"
+commandport = "COM5"
+dataport = "COM6"
 
 max_targets = 15
+
+classes = ["child", "adult", "bicyclist"]  # , "random"]
+shortcuts = ['a','s','d']
 
 class SerialReceiver(QtCore.QObject):
 
@@ -29,20 +34,32 @@ class SerialReceiver(QtCore.QObject):
 
     def run(self):
         while(self.serial.in_waiting > 0):
-            byte = self.serial.read(1)
+            byte = self.serial.read(self.serial.in_waiting)
+            bytes_read = len(byte)
             # print(byte)
             self.buffer += byte
             # Check if we received full packet
-            if frameParser.matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], self.buffer[-8:]):
-                # print(f"packet, size:{len(self.buffer)}", flush = True)
-                frame = frameParser.parseFrame(bytes(self.buffer))
-                if frame != None:
-                    #visualizeFrame(frame)
-                    #predict_targets(frame)
-                    #store_data(frame)
-                    self.frameReceived.emit(frame)
-                    #print("frame")
-                self.buffer = self.buffer[-8:]
+            for i in range(len(self.buffer)):
+                if frameParser.matchArrays([0x02, 0x01, 0x04, 0x03, 0x06, 0x05, 0x08, 0x07], self.buffer[i:i+8]):
+                    framelen = int.from_bytes(self.buffer[i+12+8:i+15+8], 'little')
+                    if len(self.buffer) < i+framelen+1:
+                        return
+
+                    #print(f"packet, at i={i} packet len: {framelen} buffer size:{len(self.buffer)}", flush = True)
+                    #print(self.buffer)
+                    frame = frameParser.parseFrame(bytes(self.buffer[i:]))
+                    #Store raw data
+                    rawfile.write(bytes(self.buffer[i:i+framelen+1]))
+
+                    if frame is not None:
+
+                        #print("frame received")
+                        self.frameReceived.emit(frame)
+                    else:
+                        print("parse failure")
+
+                    self.buffer = self.buffer[i+framelen:]
+                    break
 
 class Predictor(QtCore.QObject):
     newPrediction = QtCore.Signal(dict)
@@ -106,10 +123,11 @@ class Predictor(QtCore.QObject):
                 self.target_samples[tid] = 0
 
 class MyWidget(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, outputfile):
         super().__init__()
 
         self.threadpool = QtCore.QThreadPool()
+        self.mouseLocation = None
 
         #Create basic layout
         self.button = QtWidgets.QPushButton("Start sensor")
@@ -161,7 +179,7 @@ class MyWidget(QtWidgets.QWidget):
         self.layout.addLayout(self.graphscontainer)
 
         #POI tracker
-        self.POITracker = POITracker()
+        self.POITracker = POITracker(outputfile)
 
         #neural net runner
         self.predictor = Predictor(20)
@@ -176,24 +194,30 @@ class MyWidget(QtWidgets.QWidget):
             #Start timer for serial reading
             self.readtimer = QtCore.QTimer(self)
             self.readtimer.timeout.connect(self.serialReceiver.run)
-            self.readtimer.start(5)
+            self.readtimer.start(10)
         except Exception as msg:
             print("serial not started!", msg)
 
+
+
     def keyPressEvent(self, event):
-        print("test", event.text())
+        #print("test", event.key())
+        mpoint = np.array([self.mouseLocation.x(), self.mouseLocation.y()])
+
+        distances = np.sqrt(np.sum((mpoint - self.POITracker.getLocations()) ** 2, axis=1))
+        closest = np.argmin(distances)
+
+        selected_class = shortcuts.index(event.text())
+
+        if (distances[closest] < 1.0):
+            self.text.setText(f"mouse over point {self.POITracker.activePOIs[closest].uid} = {selected_class}")
+        self.POITracker.activePOIs[closest].class_id = selected_class
 
     def mouseMoved(self, event):
         if self.POIs.shape[0] > 0:
             pos = event
             localpoint = self.plotwindow.getViewBox().mapSceneToView(pos)
-            self.text.setText(f"x:{localpoint.x()}, y:{localpoint.y()}")
-            mpoint = np.array([localpoint.x(), localpoint.y()])
-
-            distances = np.sqrt(np.sum((mpoint - self.POITracker.getLocations()) ** 2, axis=1))
-            closest = np.argmin(distances)
-            if(distances[closest] < 1.0):
-                self.text.setText(f"mouse over point {closest}")
+            self.mouseLocation = localpoint
 
 
     def showPrediction(self, results):
@@ -202,8 +226,8 @@ class MyWidget(QtWidgets.QWidget):
             pred = results['result']
             cid = np.argmax(pred)
 
-            classes = ["child", "adult", "bicyclist"]  # , "random"]
-            ti.setText(f"{int(pred[cid]*100):3}% {classes[cid]}")
+
+            ti.setText(f"{self.POITracker.poiFromTid(results['tid']).uid}: {int(pred[cid]*100):3}% {classes[cid]} set to: {self.POITracker.poiFromTid(results['tid']).class_id}")
             ti.setPos(results['x'], results['y'])
         else:
             ti.setText("")
@@ -218,7 +242,7 @@ class MyWidget(QtWidgets.QWidget):
         self.POIs = self.POITracker.getLocations()
         if(self.POIs.shape[0] > 0):
             self.POI3D.setData(pos=self.POIs)  # , color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']])).
-            self.plot2.setData(self.POIs)
+        self.plot2.setData(self.POIs)
 
 
         # Point cloud
@@ -232,10 +256,11 @@ class MyWidget(QtWidgets.QWidget):
                 points.append(np.array([x, y, vel],dtype=np.float32))
 
         # unclustered points
+        #print(f"{len(frame.points)} unclustered points")
         for point in frame.points:
             y, x = pol2cart(point['range'], point['angle'])
             vel = point['doppler']
-            colors.append([.0, .0, .0, .5])
+            colors.append([1.0, 1.0, 1.0, point['snr']/20.0])
             points.append(np.array([x, y, vel],dtype=np.float32))
 
         # [print(c.points, flush=True) for c in frame.clusters]
@@ -252,8 +277,13 @@ class MyWidget(QtWidgets.QWidget):
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
 
-    widget = MyWidget()
+    if(len(sys.argv) > 1):
+        outputfile = open(f"{sys.argv[1]}-{datetime.now().day}.msgpack", "ab")
+    rawfile = open(f"raw/{datetime.now().strftime('%y-%m-%d_%H%M')}.bin", "ab")
+
+    widget = MyWidget(outputfile)
     widget.resize(800, 600)
     widget.show()
+
 
     sys.exit(app.exec_())

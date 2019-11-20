@@ -60,8 +60,8 @@ def main():
 
     indices = np.arange(len(labels))
 
-    np.random.seed(13317)
-    np.random.shuffle(indices)
+    # np.random.seed(13317)
+    # np.random.shuffle(indices)
     print(f"datasets: {numa} {numb}")
     #set up SVM
 
@@ -78,39 +78,10 @@ def main():
     testset = featurevecs[indices[-500:],:]
     testlabels = labels[indices[-500:]]
 
-    #Set up model
-    n_hidden = 10
-    n_categories = 2
-
-    model = RNN(featurevecs.shape[1], n_hidden, n_categories)
-    criterion = nn.NLLLoss()
-    optimizer = optim.Adam(model.parameters())
     
-    n_timeslice = 10
-
-    #Train
-    for epoch in range(100):
-        for sample in range(featurevecs.shape[0]):
-            timeslice = featurevecs[sample:sample+n_timeslice]
-            output, loss = train(timeslice, labels[sample], model)
 
 
 
-    
-def train(X, Y, model):
-    hidden = model.initHidden()
-
-    model.zero_grad()
-    optimizer.zero_grad()
-
-    for i in range(X.size()[0]):
-        output, hidden = model(X[i], hidden)
-
-    loss = criterion(output, Y)
-    loss.backward()
-    optimizer.step()
-
-    return output, loss.item()
 
 
 
