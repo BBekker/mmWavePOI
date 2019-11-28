@@ -83,4 +83,5 @@ class POITracker(QtCore.QObject):
         return next(filter(lambda x: x.tid == tid, self.activePOIs))
 
     def savepoi(self, poi):
-        self.outputfile.write(msgpack.packb(vars(poi), use_bin_type=True))
+        if(self.outputfile != None):
+            self.outputfile.write(msgpack.packb(vars(poi), use_bin_type=True))

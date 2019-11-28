@@ -4,7 +4,8 @@ import numpy as np
 
 def startSensor(commandport):
     with serial.Serial(commandport,115200, parity=serial.PARITY_NONE) as controlSerial:
-        with open("68xx_pplcount_ES2.cfg", 'r') as configfile:
+#        with open("68xx_pplcount_ES2.cfg", 'r') as configfile:
+        with open("people_detection_and_tracking_50m_3D.cfg", 'r') as configfile:
             for line in configfile:
                 print(">> " + line, flush = True)
                 controlSerial.write(line.encode('ascii'))

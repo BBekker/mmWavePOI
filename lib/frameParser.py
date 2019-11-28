@@ -16,9 +16,7 @@ class Message(Enum):
     POINT_CLOUD = 6
     TARGET_LIST = 7
     TARGET_INDEX = 8
-    STATS = 9
-    HEATMAP = 10
-    MAX = 11
+    POINT_CLOUD_SIDE_INFO = 9
     
     
 frameParser = Aligned(4,
@@ -34,24 +32,34 @@ frameParser = Aligned(4,
         'subframeNumber' / Int32ul,
         'chirpProcessingMargin' / Int32ul, 
         'frameProcessingMargin' / Int32ul,
-        'uartSendingTime' / Int32ul,
         'trackingProcessingTime' / Int32ul,
+        'uartSendingTime' / Int32ul,
         'numTLVs' / Int16ul, 
         'checksum' / Int16ul,
     ),
+    #Probe(this.header),
     "packets" / Struct(
              "type" / Int32ul,
              "len" / Int32ul,
+                # Probe(this.type),
+                # Probe(this.len),
              "data" / Switch(this.type,
                 {
-                Message.POINT_CLOUD: 
+                Message.POINT_CLOUD:
                     "objects" / Struct(
                         "range" / Float32l,
-                        "angle" / Float32l,
+                        "azimuth" / Float32l,
+                        "elevation" / Float32l,
                         "doppler" / Float32l,
-                        "snr" / Float32l,
-                    )[lambda ctx: int((ctx.len - 8) / 16)],
-                
+                    )[lambda ctx: int((ctx.len) / 16)],
+
+
+                Message.POINT_CLOUD_SIDE_INFO:
+                    "objects" / Struct(
+                        "snr" / Int16sl,
+                        "noise" / Int16sl,
+                    )[lambda ctx: int((ctx.len) / 4)],
+
                 Message.TARGET_LIST: 
                     "targets" / Struct(
                         "tid" / Int32ul,
@@ -61,12 +69,13 @@ frameParser = Aligned(4,
                         "velY" / Float32l,
                         "accX" / Float32l,
                         "accY"/ Float32l,
-                        "ec" / Float32l[9],
-                        "g" / Float32l
-                    )[lambda ctx: int((ctx.len-8) / (17*4))],
+                        "posZ" / Float32l,
+                        "velZ" / Float32l,
+                        "accZ" / Float32l
+                    )[lambda ctx: int((ctx.len) / (10*4))],
                  
                 Message.TARGET_INDEX:
-                    "indices" / Int8ul[this.len - 8],
+                    "indices" / Int8ul[this.len],
                     
                 Message.NOISE_PROFILE: 
                     Array(rangeFFTSize, Int16ul),
@@ -76,19 +85,7 @@ frameParser = Aligned(4,
                     
                 Message.RANGE_DOPPLER_HEAT_MAP: 
                     Array(rangeFFTSize * dopplerFFTSize, Int16ul),
-                    
-                Message.STATS: 
-                    Struct(
-                    "interFrameProcessingTime" / Int32ul,
-                    "transmitOutputTime" / Int32ul,
-                    "interFrameProcessingMargin" / Int32ul,
-                    "interChirpProcessingMargin" / Int32ul,
-                    "activeFrameCPULoad" / Int32ul,
-                    "interFrameCPULoad" / Int32ul
-                ),
 
-                Message.HEATMAP:
-                    Float32l[lambda ctx: int((ctx.len - 8) / 4)],
                 }
                 , default=Array(this.len, Byte))
          )[this.header.numTLVs] 
@@ -127,7 +124,7 @@ class Cluster:
         self.info = info
 
     def getPoints(self):
-        return np.array([[d['range'], d['angle'], d['doppler'], d['snr']] for d in self.points])
+        return np.array([[d['range'], d['azimuth'], d['doppler'], d['snr'], d['elevation']] for d in self.points])
 
     def toDict(self):
         return {"tid": self.tid,  "class": 0, "points": self.getPoints()}
@@ -156,42 +153,47 @@ class ParsedFrame:
 
 
 
-previousFrame = None
 def parseFrame(rawData):
-    global previousFrame
 
     parsedFrame = None
     if(rawData == None):
         return None
     try:
         frame = frameParser.parse(rawData)
-        if previousFrame != None and previousFrame['header']['frameNumber'] == (frame['header']['frameNumber']-1):
-            parsedFrame = ParsedFrame(frame['header']['frameNumber'])
-            targetList = getPacket(frame, Message.TARGET_LIST)
-            targetIndices = getPacket(frame, Message.TARGET_INDEX)
-            pointCloud = getPacket(previousFrame, Message.POINT_CLOUD)
+        #print(frame)
+        parsedFrame = ParsedFrame(frame['header']['frameNumber'])
+        targetList = getPacket(frame, Message.TARGET_LIST)
+        targetIndices = getPacket(frame, Message.TARGET_INDEX)
+        pointCloudLocation = getPacket(frame, Message.POINT_CLOUD)
+        sideInfo = getPacket(frame, Message.POINT_CLOUD_SIDE_INFO)
 
-            # print(len(targetIndices), targetIndices)
-            # print(len(pointCloud))
+        pointCloud = [{**pointCloudLocation[i], **sideInfo[i]} for i in range(len(pointCloudLocation))]
 
-            #print(targetList, flush=True)
-            for target in targetList:
-                tid =  target['tid']
-                cluster = parsedFrame.newCluster(tid)
-                cluster.addInfo(target)
-                for targetIndex in range(len(targetIndices)):
-                    if targetIndices[targetIndex] == tid:
-                        cluster.addPoint(pointCloud[targetIndex])
+        # print(len(targetIndices))
+        # print(len(pointCloudLocation), len(sideInfo))
 
-            #Add points without a cluster
+        #print(targetList, flush=True)
+        for target in targetList:
+            tid =  target['tid']
+            cluster = parsedFrame.newCluster(tid)
+            cluster.addInfo(target)
             for targetIndex in range(len(targetIndices)):
-                if targetIndices[targetIndex] >= 250:
-                    parsedFrame.addPoint(pointCloud[targetIndex])       
-        else:
-            print("Frame skipped!", flush=True)
-        previousFrame = frame
+                if targetIndices[targetIndex] == tid:
+                    cluster.addPoint(pointCloud[targetIndex])
+
+        #Add points without a cluster
+        for targetIndex in range(len(targetIndices)):
+            if targetIndices[targetIndex] >= 250:
+                parsedFrame.addPoint(pointCloud[targetIndex])
+
     except StreamError:
         print("bad packet")
-        previousFrame = None
 
     return parsedFrame
+
+
+if __name__ == "__main__":
+    import sys
+    file = sys.argv[1]
+    parsed = GreedyRange(frameParser).parse_file(file)
+    print(len(parsed))

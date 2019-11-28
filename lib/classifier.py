@@ -14,6 +14,8 @@ def get_featurevector(data):
     """
      Data = [range, angle, doppler, snr]
     """
+    data = data[:,:,:4]
+    #print(data)
     points = np.sum((np.sum(data, axis=2) != 0), axis=1)
 
     summed = np.sum(data, axis=1)

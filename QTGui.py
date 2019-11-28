@@ -1,5 +1,5 @@
 import sys
-import random
+import argparse
 from PySide2 import QtCore, QtWidgets, QtGui,QtOpenGL
 import pyqtgraph as pg
 import pyqtgraph.opengl as pgl
@@ -19,7 +19,7 @@ dataport = "COM6"
 
 max_targets = 15
 
-classes = ["child", "adult", "bicyclist"]  # , "random"]
+classes = ["adult", "bicyclist","child"]  # , "random"]
 shortcuts = ['a','s','d']
 
 class SerialReceiver(QtCore.QObject):
@@ -36,6 +36,8 @@ class SerialReceiver(QtCore.QObject):
         while(self.serial.in_waiting > 0):
             byte = self.serial.read(self.serial.in_waiting)
             bytes_read = len(byte)
+            # Store raw data
+            rawfile.write(byte)
             # print(byte)
             self.buffer += byte
             # Check if we received full packet
@@ -47,9 +49,9 @@ class SerialReceiver(QtCore.QObject):
 
                     #print(f"packet, at i={i} packet len: {framelen} buffer size:{len(self.buffer)}", flush = True)
                     #print(self.buffer)
+                    #print(self.buffer[i:i+framelen+1])
                     frame = frameParser.parseFrame(bytes(self.buffer[i:]))
-                    #Store raw data
-                    rawfile.write(bytes(self.buffer[i:i+framelen+1]))
+
 
                     if frame is not None:
 
@@ -60,6 +62,24 @@ class SerialReceiver(QtCore.QObject):
 
                     self.buffer = self.buffer[i+framelen:]
                     break
+
+class Playback(QtCore.QObject):
+
+    frameReceived = QtCore.Signal(frameParser.ParsedFrame)
+
+    def __init__(self, file):
+        QtCore.QObject.__init__(self)
+        self.file = file
+
+    def getFrame(self):
+        parsed = construct.RawCopy(frameParser.frameParser).parse_stream(self.file)
+        self.file.seek(parsed['offset2'])
+        #print(parsed)
+        #print("=================")
+        frame = frameParser.parseFrame(parsed['data'])
+        self.frameReceived.emit(frame)
+
+
 
 class Predictor(QtCore.QObject):
     newPrediction = QtCore.Signal(dict)
@@ -123,8 +143,9 @@ class Predictor(QtCore.QObject):
                 self.target_samples[tid] = 0
 
 class MyWidget(QtWidgets.QWidget):
-    def __init__(self, outputfile):
+    def __init__(self, outputfile, playback , inputfile):
         super().__init__()
+        self.playback = playback
 
         self.threadpool = QtCore.QThreadPool()
         self.mouseLocation = None
@@ -186,15 +207,24 @@ class MyWidget(QtWidgets.QWidget):
         self.predictor.newPrediction.connect(self.showPrediction)
         #start serial reader
         try:
-            self.serialReceiver = SerialReceiver()
-            self.serialReceiver.frameReceived.connect(self.POITracker.processFrame)
-            self.serialReceiver.frameReceived.connect(self.visualizeFrame)
-            self.serialReceiver.frameReceived.connect(lambda x: self.threadpool.start(Worker(lambda: self.predictor.predict_targets(x))))
+            if (not self.playback):
+                self.serialReceiver = SerialReceiver()
+                self.serialReceiver.frameReceived.connect(self.POITracker.processFrame)
+                self.serialReceiver.frameReceived.connect(self.visualizeFrame)
+                self.serialReceiver.frameReceived.connect(lambda x: self.threadpool.start(Worker(lambda: self.predictor.predict_targets(x))))            #Start timer for serial reading
+                self.readtimer = QtCore.QTimer(self)
+                self.readtimer.timeout.connect(self.serialReceiver.run)
+                self.readtimer.start(5)
+            else:
+                self.playback = Playback(inputfile)
+                self.playback.frameReceived.connect(self.POITracker.processFrame)
+                self.playback.frameReceived.connect(self.visualizeFrame)
+                self.playback.frameReceived.connect(lambda x: self.threadpool.start(Worker(lambda: self.predictor.predict_targets(x))))
+                self.readtimer = QtCore.QTimer(self)
+                self.readtimer.timeout.connect(self.playback.getFrame)
+                self.readtimer.start(100)
 
-            #Start timer for serial reading
-            self.readtimer = QtCore.QTimer(self)
-            self.readtimer.timeout.connect(self.serialReceiver.run)
-            self.readtimer.start(10)
+
         except Exception as msg:
             print("serial not started!", msg)
 
@@ -227,7 +257,7 @@ class MyWidget(QtWidgets.QWidget):
             cid = np.argmax(pred)
 
 
-            ti.setText(f"{self.POITracker.poiFromTid(results['tid']).uid}: {int(pred[cid]*100):3}% {classes[cid]} set to: {self.POITracker.poiFromTid(results['tid']).class_id}")
+            ti.setText(f"{results['tid']}: {int(pred[cid]*100):3}% {classes[cid]} set to: {self.POITracker.poiFromTid(results['tid']).class_id}")
             ti.setPos(results['x'], results['y'])
         else:
             ti.setText("")
@@ -244,22 +274,21 @@ class MyWidget(QtWidgets.QWidget):
             self.POI3D.setData(pos=self.POIs)  # , color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']])).
         self.plot2.setData(self.POIs)
 
-
         # Point cloud
         points = [np.array([0.0,0.0,0.0])]
         colors = [[0.0,0.0,0.0,0.0]]
         for cluster in frame.clusters:
             for point in cluster.points:
-                y, x = pol2cart(point['range'], point['angle'])
-                vel = point['doppler']
+                y, x = pol2cart(point['range'], point['azimuth'])
+                vel = point['elevation']
                 colors.append(colormap[cluster.info['tid'] % (len(colormap) - 1)])
                 points.append(np.array([x, y, vel],dtype=np.float32))
 
         # unclustered points
         #print(f"{len(frame.points)} unclustered points")
         for point in frame.points:
-            y, x = pol2cart(point['range'], point['angle'])
-            vel = point['doppler']
+            y, x = pol2cart(point['range'], point['azimuth'])
+            vel = point['elevation']
             colors.append([1.0, 1.0, 1.0, point['snr']/20.0])
             points.append(np.array([x, y, vel],dtype=np.float32))
 
@@ -270,18 +299,29 @@ class MyWidget(QtWidgets.QWidget):
     def magicExecutor(self):
         self.threadpool.start(Worker(lambda: startSensor(commandport)))
 
-
-
+def parse_arguments(args):
+    parser = argparse.ArgumentParser(description='readout radar sensor')
+    parser.add_argument('--file', help = "filename to store/read")
+    parser.add_argument('--playback', help = "play back file" )
+    #parser.add_argument('--no_raw', action='store_', help = "dont store raw file")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
 
-    if(len(sys.argv) > 1):
-        outputfile = open(f"{sys.argv[1]}-{datetime.now().day}.msgpack", "ab")
-    rawfile = open(f"raw/{datetime.now().strftime('%y-%m-%d_%H%M')}.bin", "ab")
+    args = parse_arguments(sys.argv)
+    print(args)
+    outputfile = None
+    inputfile = None
+    if(args.file is not None):
+        outputfile = open(f"{args.file}-{datetime.now().day}.msgpack", "ab")
 
-    widget = MyWidget(outputfile)
+        rawfile = open(f"raw/{datetime.now().strftime('%y-%m-%d_%H%M')}.bin", "ab")
+    if(args.playback is not None):
+        inputfile = open(args.playback, 'rb')
+
+    widget = MyWidget(outputfile, args.playback, inputfile)
     widget.resize(800, 600)
     widget.show()
 

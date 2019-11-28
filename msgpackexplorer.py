@@ -14,14 +14,9 @@ if __name__ == "__main__":
         unpacker = msgpack.Unpacker(file, raw=False)
         for msg in unpacker:
             tracks +=1
-            if(len(msg['pointclouds']) > 40 and tracks < 100):
+            if(msg['class_id'] > -1):
                 longtracks += 1
-        #         xy = np.array(msg['track'])
-        #         plt.scatter(xy[:,0], xy[:,1])
-        #         plt.show()
-        #     print(len(msg['pointclouds']))
-        #msg = list(unpacker)[-1]
-            #print(msg)
+
                 xy = np.array(msg['track'])
                 plt.scatter(xy[:,0], xy[:,1], edgecolors='face')
     #plt.scatter(np.array(xys))
