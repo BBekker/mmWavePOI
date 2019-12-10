@@ -1,0 +1,7 @@
+msgpack
+msgpack-numpy
+numpy
+PyOpenGL
+pyqtgraph
+PySide2
+shiboken2

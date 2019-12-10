@@ -11,7 +11,8 @@ msgpack_numpy.patch()
 model = tf.keras.Sequential([
     tf.keras.layers.Dense(50, activation='relu'),
     tf.keras.layers.Dense(50, activation='relu'),
-    tf.keras.layers.Dense(50, activation='relu'),
+#    tf.keras.layers.Dense(50, activation='relu'),
+    tf.keras.layers.LSTM(10, input_shape=(100, 50)),
     tf.keras.layers.Dense(4, activation='softmax')
 ])
 
@@ -73,19 +74,24 @@ def get_dataset(filename):
     labels = []
 
     for msg in read_file(filename):
+        msg_feature_vectors = []
+        msg_labels = 0
         pointclouds = get_pointclouds(msg)
         if(len(pointclouds) > 20):
             class_id = msg['class_id']
             for i in range(len(pointclouds)):
                 pointcloud = pointclouds[i]
                 if (pointcloud.shape[0] > 1):
-                    feature_vectors.append(get_featurevector(pointcloud))
-                    labels.append(msg['class_id'] if msg['class_id'] >= 0 else 3)
+                    msg_feature_vectors.append(get_featurevector(pointcloud))
+                    msg_labels = msg['class_id'] if msg['class_id'] >= 0 else 3
+        msg_labels = [msg_labels]*len(msg_feature_vectors)
+        feature_vectors.append(np.array(msg_feature_vectors))
+        labels.append(tf.one_hot(np.array(msg_labels), depth=4))
 
     # labels: [adult, bike, child, clutter]
 
-    a = tf.one_hot(np.array(labels), depth=4)
-    b = np.stack(feature_vectors)
+    a = np.array(labels)
+    b = np.array(feature_vectors)
     return a, b
 
 
