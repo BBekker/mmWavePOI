@@ -22,7 +22,7 @@ def get_featurevector(data):
     averaged = summed / np.tile(points, [4,1]).T
     #deviation = np.std(data, axis=1)
 
-    featurevecs = np.zeros((data.shape[0], 12))
+    featurevecs = np.zeros((data.shape[0], 10))
 
     featurevecs[:,0] = points
     featurevecs[:,1] = averaged[:,0]

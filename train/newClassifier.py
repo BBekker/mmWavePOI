@@ -4,7 +4,6 @@ import numpy as np
 from sys import argv
 import tensorflow as tf
 
-
 #enable numpy in msgpack files
 msgpack_numpy.patch()
 
@@ -135,3 +134,4 @@ model.save_weights('easy_checkpoint')
 res = model(b)
 #print(a.shape, np.argmax(res.numpy(),axis=1).shape)
 print(tf.math.confusion_matrix(np.argmax(a,axis=1), np.argmax(res.numpy(),axis=1)))
+plt.show()

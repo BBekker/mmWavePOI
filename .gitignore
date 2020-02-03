@@ -5,3 +5,4 @@ Debug/
 __pycache__/
 *.py[cod]
 GUI/venv/
+raw/

@@ -10,7 +10,7 @@ from lib import frameParser, classifier, storage
 import serial
 from lib.util import *
 import joblib
-from lib.POI import POITracker
+from lib.POI import POITracker, Predictor
 from datetime import datetime
 import construct
 
@@ -81,67 +81,6 @@ class Playback(QtCore.QObject):
 
 
 
-class Predictor(QtCore.QObject):
-    newPrediction = QtCore.Signal(dict)
-
-    def __init__(self, averaging):
-        QtCore.QObject.__init__(self)
-
-        ##Mod this for model
-        self.scaler = joblib.load('scaler.joblib')
-        # model = joblib.load('model_logistic.joblib')
-        # model = joblib.load('model_norandom.joblib')
-        # model = joblib.load('model_logistic.joblib')
-        self.model = joblib.load('model_svc.joblib')
-        self.classes = ["child", "adult", "bicyclist"]  # , "random"]
-        self.n_classes = len(self.classes)
-
-
-        self.averaging = averaging
-        self.max_targets = max_targets
-        self.target_samples = [0] * self.max_targets
-        self.predictions = np.ones((self.max_targets, self.n_classes, averaging)) / self.n_classes  # [max_targets,3,10] tensor
-
-    def addPrediction(self, id, prediction):
-        for i in range(self.averaging-1, 0, -1):
-            self.predictions[id, :, i] = self.predictions[id, :, i - 1]
-        self.predictions[id, :, 0] = prediction
-        return self.getPrediction(id)
-
-    def getPrediction(self, id):
-        return np.mean(self.predictions[id, :, :], axis=1)
-
-    def predict_targets(self, frame):
-        #print("predicting...")
-        result = {}
-        for tid in range(self.max_targets):
-            tid_active = False
-            for cluster in frame.clusters:
-                if tid == cluster.tid:
-                    tid_active = True
-                    if (len(cluster.points) > 2):
-                        points = np.array([cluster.getPoints()])
-                        features = classifier.get_featurevector(points)
-                        features = self.scaler.transform(features)  # Batch norm
-                        pred = self.model.predict_proba(features)
-                        pred = self.addPrediction(tid, pred[0, :])  # LPF
-                        self.target_samples[tid] += 1
-                        classid = np.argmax(pred)
-                        #print(tid, classid, pred[classid], points.shape[1])
-
-                        result['x'] = cluster.info['posx']
-                        result['y'] = cluster.info['posy']
-                        result['tid'] = tid
-                        result['result'] = pred
-                        result['samples'] = self.target_samples[tid]
-                        self.newPrediction.emit(result)
-            # if we didnt find the TID, then remove the id
-            if tid_active == False and self.target_samples[tid] > 0:
-                result['tid'] = tid
-                result['samples'] = 0
-                self.newPrediction.emit(result)
-                self.target_samples[tid] = 0
-
 class MyWidget(QtWidgets.QWidget):
     def __init__(self, outputfile, playback , inputfile):
         super().__init__()
@@ -203,15 +142,14 @@ class MyWidget(QtWidgets.QWidget):
         self.POITracker = POITracker(outputfile)
 
         #neural net runner
-        self.predictor = Predictor(20)
+        self.predictor = Predictor(20, max_targets)
         self.predictor.newPrediction.connect(self.showPrediction)
         #start serial reader
         try:
             if (not self.playback):
                 self.serialReceiver = SerialReceiver()
                 self.serialReceiver.frameReceived.connect(self.POITracker.processFrame)
-                self.serialReceiver.frameReceived.connect(self.visualizeFrame)
-                self.serialReceiver.frameReceived.connect(lambda x: self.threadpool.start(Worker(lambda: self.predictor.predict_targets(x))))            #Start timer for serial reading
+                self.serialReceiver.frameReceived.connect(self.visualizeFrame)     #Start timer for serial reading
                 self.readtimer = QtCore.QTimer(self)
                 self.readtimer.timeout.connect(self.serialReceiver.run)
                 self.readtimer.start(5)
@@ -219,7 +157,6 @@ class MyWidget(QtWidgets.QWidget):
                 self.playback = Playback(inputfile)
                 self.playback.frameReceived.connect(self.POITracker.processFrame)
                 self.playback.frameReceived.connect(self.visualizeFrame)
-                self.playback.frameReceived.connect(lambda x: self.threadpool.start(Worker(lambda: self.predictor.predict_targets(x))))
                 self.readtimer = QtCore.QTimer(self)
                 self.readtimer.timeout.connect(self.playback.getFrame)
                 self.readtimer.start(100)
@@ -237,11 +174,16 @@ class MyWidget(QtWidgets.QWidget):
         distances = np.sqrt(np.sum((mpoint - self.POITracker.getLocations()) ** 2, axis=1))
         closest = np.argmin(distances)
 
-        selected_class = shortcuts.index(event.text())
+        if(event.text() == " "):
+            self.POITracker.breakuppoi(self.POITracker.activePOIs[closest])
 
-        if (distances[closest] < 1.0):
-            self.text.setText(f"mouse over point {self.POITracker.activePOIs[closest].uid} = {selected_class}")
-        self.POITracker.activePOIs[closest].class_id = selected_class
+        try:
+            selected_class = shortcuts.index(event.text())
+            if (distances[closest] < 1.0):
+                self.text.setText(f"mouse over point {self.POITracker.activePOIs[closest].uid} = {selected_class}")
+            self.POITracker.activePOIs[closest].class_id = selected_class
+        except ValueError as v:
+            pass
 
     def mouseMoved(self, event):
         if self.POIs.shape[0] > 0:
@@ -274,13 +216,22 @@ class MyWidget(QtWidgets.QWidget):
             self.POI3D.setData(pos=self.POIs)  # , color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']])).
         self.plot2.setData(self.POIs)
 
+        pois = self.POITracker.getPOIs()
+        for i in range(len(self.textitems)):
+            if len(pois) > i:
+                pos = pois[i].getPos()
+                self.textitems[i].setPos(pos[0], pos[1])
+                self.textitems[i].setText(f"{pois[i].class_id}, h={pois[i].getHeight(90):.2f}")
+            else:
+                self.textitems[i].setText("")
+
         # Point cloud
         points = [np.array([0.0,0.0,0.0])]
         colors = [[0.0,0.0,0.0,0.0]]
         for cluster in frame.clusters:
             for point in cluster.points:
                 y, x = pol2cart(point['range'], point['azimuth'])
-                vel = point['elevation']
+                _, vel = pol2cart(point['range'], point['elevation'])
                 colors.append(colormap[cluster.info['tid'] % (len(colormap) - 1)])
                 points.append(np.array([x, y, vel],dtype=np.float32))
 
@@ -288,7 +239,7 @@ class MyWidget(QtWidgets.QWidget):
         #print(f"{len(frame.points)} unclustered points")
         for point in frame.points:
             y, x = pol2cart(point['range'], point['azimuth'])
-            vel = point['elevation']
+            _, vel = pol2cart(point['range'], point['elevation'])
             colors.append([1.0, 1.0, 1.0, point['snr']/20.0])
             points.append(np.array([x, y, vel],dtype=np.float32))
 

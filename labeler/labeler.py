@@ -6,6 +6,8 @@ import pyqtgraph.opengl as pgl
 import numpy as np
 import msgpack
 import msgpack_numpy
+from joblib import dump, load
+
 
 msgpack_numpy.patch()
 
@@ -18,6 +20,13 @@ def pol2cart(rho, phi):
     x = rho * np.cos(phi)
     y = rho * np.sin(phi)
     return(x, y)
+
+def countPointclouds(pcs):
+    count = 0
+    for pc in pcs:
+        if(pc.size > 0):
+            count += 1
+    return count
 
 class DataHandler(QtCore.QObject):
 
@@ -34,8 +43,11 @@ class DataHandler(QtCore.QObject):
             for poi in self.pois:
                 lastframe = poi['lastFrame']
                 firstframe = lastframe - len(poi['track'])
-                for i in range(firstframe, lastframe, 1):
-                    self.frames[i].append(poi) #store a reference for efficient lookup
+                if( countPointclouds(poi['pointclouds']) > 1):
+                    for i in range(firstframe, lastframe, 1):
+                        self.frames[i].append(poi) #store a reference for efficient lookup
+
+
 
     def getPOIs(self, frameNo):
         frame = self.frames[frameNo]
@@ -61,6 +73,9 @@ class DataHandler(QtCore.QObject):
             offset = frameNo - poi['lastFrame']
             if(poi['pointclouds'][offset].size != 0):
                 locs.append(poi['pointclouds'][offset])
+            # else:
+            #     locs.append(np.empty((,4)))
+
         return locs
 
     def get_classes(self,frameNo):
@@ -72,6 +87,40 @@ class DataHandler(QtCore.QObject):
 
     def get_poi_in_frame(self, frame, poi):
         return self.frames[frame][poi]
+
+    # def get_featurevector(data):
+    #     """
+    #      Data = [range, angle, doppler, snr]
+    #     """
+    #     # print(data)
+    #     # points = np.sum((np.sum(data, axis=2) != 0), axis=1)
+    #     points = data.shape[0]
+    #
+    #     summed = np.sum(data, axis=0)
+    #     averaged = summed / points
+    #     # deviation = np.std(data, axis=1)
+    #
+    #     featurevecs = np.zeros((10))
+    #
+    #     featurevecs[0] = points
+    #     featurevecs[1] = averaged[0]
+    #     featurevecs[2] = averaged[1]
+    #     featurevecs[3] = averaged[2]
+    #     featurevecs[4] = averaged[3]
+    #     featurevecs[5] = summed[3]
+    #
+    #     featurevecs[6] = np.std(data[:, 1])
+    #     featurevecs[7] = np.std(data[:, 2])
+    #     featurevecs[8] = np.std(data[:, 0])
+    #     featurevecs[9] = np.std(data[:, 3])
+    #     # Out: [num points, range, angle, doppler, snr tot, snr avg, angle stdev, doppler stdev, rangedev, rssi stdev ]
+    #
+    #     return featurevecs
+    #
+    # def getPredictions(self, frameNo):
+    #     pointclouds = self.get_pointcloud(frameNo)
+
+
 
 
 class MyWidget(QtWidgets.QWidget):
@@ -151,7 +200,9 @@ class MyWidget(QtWidgets.QWidget):
         self.controlLayout.addWidget(self.savebutton)
 
         self.layout.addLayout(self.controlLayout)
-        #open fil
+
+        #predictor:
+        self.model = load('randomForrest.joblib')
 
 
 
@@ -217,8 +268,9 @@ class MyWidget(QtWidgets.QWidget):
         pointclouds = np.concatenate(pointclouds, axis=0)
 
         y, x = pol2cart(pointclouds[:,0], pointclouds[:,1])
+        _, vel = pol2cart(pointclouds[:,0], pointclouds[:,4])
         #print(y,x,pointclouds[:,3])
-        poss = np.stack((x,y,pointclouds[:,2]),axis=1)
+        poss = np.stack((x,y,vel+2.0),axis=1)
         self.pointcloud.setData(pos=poss)#, color=np.array(colors, dtype=np.float32))
         # except Exception as e:
         #     pass
