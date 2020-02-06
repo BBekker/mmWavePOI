@@ -42,7 +42,7 @@ frameParser = Aligned(4,
              "type" / Int32ul,
              "len" / Int32ul,
                 # Probe(this.type),
-                # Probe(this.len),
+                #Probe(this.len),
              "data" / Switch(this.type,
                 {
                 Message.POINT_CLOUD:
@@ -51,14 +51,14 @@ frameParser = Aligned(4,
                         "azimuth" / Float32l,
                         "elevation" / Float32l,
                         "doppler" / Float32l,
-                    )[lambda ctx: int((ctx.len) / 16)],
+                    )[lambda ctx: min(250,int((ctx.len) / 16))],
 
 
                 Message.POINT_CLOUD_SIDE_INFO:
                     "objects" / Struct(
                         "snr" / Int16sl,
                         "noise" / Int16sl,
-                    )[lambda ctx: int((ctx.len) / 4)],
+                    )[lambda ctx: min(250,int((ctx.len) / 4))],
 
                 Message.TARGET_LIST: 
                     "targets" / Struct(
@@ -72,10 +72,10 @@ frameParser = Aligned(4,
                         "posZ" / Float32l,
                         "velZ" / Float32l,
                         "accZ" / Float32l
-                    )[lambda ctx: int((ctx.len) / (10*4))],
+                    )[lambda ctx: min(50,int((ctx.len) / (10*4)))],
                  
                 Message.TARGET_INDEX:
-                    "indices" / Int8ul[this.len],
+                    "indices" / Int8ul[lambda ctx: min(250,ctx.len)],
                     
                 Message.NOISE_PROFILE: 
                     Array(rangeFFTSize, Int16ul),
@@ -87,7 +87,7 @@ frameParser = Aligned(4,
                     Array(rangeFFTSize * dopplerFFTSize, Int16ul),
 
                 }
-                , default=Array(this.len, Byte))
+                , default=Array(min(this.len,10), Byte))
          )[this.header.numTLVs] 
     )
 )

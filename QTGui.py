@@ -13,6 +13,7 @@ import joblib
 from lib.POI import POITracker, Predictor
 from datetime import datetime
 import construct
+import gtrack.gtrack as gtrack
 
 commandport = "COM5"
 dataport = "COM6"
@@ -67,22 +68,77 @@ class Playback(QtCore.QObject):
 
     frameReceived = QtCore.Signal(frameParser.ParsedFrame)
 
-    def __init__(self, file):
+    def __init__(self, file, recluster):
         QtCore.QObject.__init__(self)
         self.file = file
+        self.recluster = recluster
+        if recluster:
+            self.gtrack = gtrack.gtrack()
+
+    def reclusterFrame(self, data):
+        #print(data)
+        pointCloudLocation = frameParser.getPacket(data, frameParser.Message.POINT_CLOUD)
+        sideInfo = frameParser.getPacket(data, frameParser.Message.POINT_CLOUD_SIDE_INFO)
+        pointCloud = [{**pointCloudLocation[i], **sideInfo[i]} for i in range(len(pointCloudLocation))]
+        npdata = np.array([np.array([x['range'], x['azimuth'], x['doppler'], x['snr']]) for x in pointCloud])
+        self.gtrack.step(npdata)
+        #gtrack expects: [range, angle, doppler, SNR]
+        print(self.gtrack.getData().numtracks)
+        
+        gtrackData = self.gtrack.getData()
+        
+        #Create a nice frame object
+        parsedFrame = frameParser.ParsedFrame(data['header']['frameNumber'])
+        for t in range(gtrackData.numtracks):
+            target = self.gtrack.getTrack(t)
+            #print(target.uid)
+            tid =  target.uid
+            cluster = parsedFrame.newCluster(tid)
+            cluster.addInfo({'posx':target.S[0], 
+                            'posy':target.S[1],
+                            'sx':target.dim[0],
+                            'sy':target.dim[1], 
+                            'tid':target.tid})
+            for targetIndex in range(len(pointCloud)):
+                if gtrackData.indices[targetIndex] == tid:
+                    cluster.addPoint(pointCloud[targetIndex])
+
+        
+        unique, counts = np.unique([gtrackData.indices[i] for i in range(len(pointCloud))], return_counts=True)
+        print(dict(zip(unique, counts)))
+
+        #Add points without a cluster
+        for targetIndex in range(len(pointCloud)):
+            if gtrackData.indices[targetIndex] >= 250:
+                parsedFrame.addPoint(pointCloud[targetIndex])
+        return parsedFrame
+
+
 
     def getFrame(self):
-        parsed = construct.RawCopy(frameParser.frameParser).parse_stream(self.file)
-        self.file.seek(parsed['offset2'])
-        #print(parsed)
-        #print("=================")
-        frame = frameParser.parseFrame(parsed['data'])
-        self.frameReceived.emit(frame)
+        try:
+            parsed = construct.RawCopy(frameParser.frameParser).parse_stream(self.file)
+        
+            print(f"Getframe {parsed['offset2']} {self.file.tell()}",flush=True)
+            self.file.seek(parsed['offset2'])
+            
+            #print(parsed)
+            #print("=================")
+
+            if self.recluster:
+                frame = self.reclusterFrame(parsed['value'])
+            else:
+                frame = frameParser.parseFrame(parsed['data'])
+
+            self.frameReceived.emit(frame)
+        except Exception as e:
+            print(e)
+            self.file.seek(10,1) #probably a file error, skip a bit
 
 
 
 class MyWidget(QtWidgets.QWidget):
-    def __init__(self, outputfile, playback , inputfile):
+    def __init__(self, outputfile, playback , inputfile, recluster):
         super().__init__()
         self.playback = playback
 
@@ -128,10 +184,14 @@ class MyWidget(QtWidgets.QWidget):
         background = pgl.GLLinePlotItem(pos=np.array([[-5, 0, 0], [5, 0, 0], [10, 25, 0], [-10, 25, 0], [-5, 0, 0]]),
                                        color=(1, 1, 1, 1), width=2, antialias=True, mode='line_strip')
 
+
+        mesh = pgl.MeshData.sphere(3,5)
+        self.clusterMesh = [pgl.GLMeshItem(meshdata=mesh, edgeColor=[.2,.9,.4,.1] ,drawEdges=True, drawFaces=False) for i in range(20)]
+        [self.glview.addItem(mesh) for mesh in self.clusterMesh]
         self.glview.addItem(grid)
         self.glview.addItem(background)
         self.glview.addItem(self.pointcloud)
-        self.glview.addItem(self.POI3D)
+        #self.glview.addItem(self.POI3D)
         self.graphscontainer.addWidget(self.glview)
 
         self.glview.setSizePolicy(self.plotwindow.sizePolicy())
@@ -142,8 +202,8 @@ class MyWidget(QtWidgets.QWidget):
         self.POITracker = POITracker(outputfile)
 
         #neural net runner
-        self.predictor = Predictor(20, max_targets)
-        self.predictor.newPrediction.connect(self.showPrediction)
+        #self.predictor = Predictor(20, max_targets)
+        #self.predictor.newPrediction.connect(self.showPrediction)
         #start serial reader
         try:
             if (not self.playback):
@@ -154,12 +214,13 @@ class MyWidget(QtWidgets.QWidget):
                 self.readtimer.timeout.connect(self.serialReceiver.run)
                 self.readtimer.start(5)
             else:
-                self.playback = Playback(inputfile)
+                self.playback = Playback(inputfile, recluster)
                 self.playback.frameReceived.connect(self.POITracker.processFrame)
                 self.playback.frameReceived.connect(self.visualizeFrame)
                 self.readtimer = QtCore.QTimer(self)
                 self.readtimer.timeout.connect(self.playback.getFrame)
                 self.readtimer.start(100)
+                print(" start playback")
 
 
         except Exception as msg:
@@ -212,11 +273,19 @@ class MyWidget(QtWidgets.QWidget):
         # Targets
         # print(frame.clusters)
         self.POIs = self.POITracker.getLocations()
-        if(self.POIs.shape[0] > 0):
-            self.POI3D.setData(pos=self.POIs)  # , color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']])).
-        self.plot2.setData(self.POIs)
-
         pois = self.POITracker.getPOIs()
+        if args.clustering:
+            for i in range(20):
+                if(len(frame.clusters) > i):
+                    cluster = frame.clusters[i]
+                    self.clusterMesh[i].resetTransform()
+                    self.clusterMesh[i].setColor(colormap[cluster.info['tid'] % (len(colormap) - 1)])
+                    self.clusterMesh[i].scale(cluster.info['sx'],cluster.info['sy'],1)
+                    self.clusterMesh[i].translate(cluster.info['posx'],cluster.info['posy'],0)  # , color = np.array([colormap[i['tid'] % (len(colormap)-1)] for i in packet['data']])).
+                else:
+                    self.clusterMesh[i].resetTransform()
+            self.plot2.setData(self.POIs)
+
         for i in range(len(self.textitems)):
             if len(pois) > i:
                 pos = pois[i].getPos()
@@ -240,7 +309,7 @@ class MyWidget(QtWidgets.QWidget):
         for point in frame.points:
             y, x = pol2cart(point['range'], point['azimuth'])
             _, vel = pol2cart(point['range'], point['elevation'])
-            colors.append([1.0, 1.0, 1.0, point['snr']/20.0])
+            colors.append([1.0, 1.0, 1.0, point['snr']/30.0])
             points.append(np.array([x, y, vel],dtype=np.float32))
 
         # [print(c.points, flush=True) for c in frame.clusters]
@@ -254,9 +323,11 @@ def parse_arguments(args):
     parser = argparse.ArgumentParser(description='readout radar sensor')
     parser.add_argument('--file', help = "filename to store/read")
     parser.add_argument('--playback', help = "play back file" )
+    parser.add_argument('--clustering', help = "enable reclustering of pointclouds", action='store_true')
     #parser.add_argument('--no_raw', action='store_', help = "dont store raw file")
     return parser.parse_args()
 
+args = None
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
@@ -271,8 +342,15 @@ if __name__ == "__main__":
         rawfile = open(f"raw/{datetime.now().strftime('%y-%m-%d_%H%M')}.bin", "ab")
     if(args.playback is not None):
         inputfile = open(args.playback, 'rb')
+        inputfile.seek(0,2)
+        print(inputfile.tell())
+        inputfile.seek(0,0)
+        #inputfile.seek(355000,0)
 
-    widget = MyWidget(outputfile, args.playback, inputfile)
+
+
+
+    widget = MyWidget(outputfile, args.playback, inputfile, args.clustering)
     widget.resize(800, 600)
     widget.show()
 

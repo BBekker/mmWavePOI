@@ -2,6 +2,11 @@ msgpack
 msgpack-numpy
 numpy
 PyOpenGL
-pyqtgraph
+pyqtgraph>=0.11.0rc0
 PySide2
 shiboken2
+construct
+scikit-learn
+h5py
+matplotlib
+pyserial
