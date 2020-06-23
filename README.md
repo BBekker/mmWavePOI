@@ -12,5 +12,6 @@ labeler/labeler.py is a program to inspect the recorded data, and add labels to 
 RFClassifier.py is a script to try different classification methods based on scikit-learn.
 
 recurrent_networks.ipynb is a jupyter notebook using tensorflow to classify the tracked objects. Implemented is a LSTM and GRU network.
+You can use this online in google colab: https://colab.research.google.com/drive/1w-dlOCp_RiF4aoebhJrN33Tra0lLX_z4?usp=sharing
 
 Spread throughout are scripts for inspecting, plotting, and various tools to work with the mmwave data and intermediate formats.
