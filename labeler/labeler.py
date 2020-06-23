@@ -38,14 +38,19 @@ class DataHandler(QtCore.QObject):
             self.pois = list(unpacker)
             #print(self.pois[-1])
             self.frames = [[] for x in range(self.pois[-1]['lastFrame'])]
-
+            self.firstFrame = len(self.frames)
             #link pois to frames
             for poi in self.pois:
                 lastframe = poi['lastFrame']
                 firstframe = lastframe - len(poi['track'])
+                if firstframe < self.firstFrame:
+                    self.firstFrame = firstframe
                 if( countPointclouds(poi['pointclouds']) > 1):
                     for i in range(firstframe, lastframe, 1):
                         self.frames[i].append(poi) #store a reference for efficient lookup
+            self.frames = self.frames[self.firstFrame:] #remove empty frames
+
+
 
 
 
@@ -54,7 +59,7 @@ class DataHandler(QtCore.QObject):
         #print(frameNo)
         locs = []
         for poi in frame:
-            offset = frameNo - poi['lastFrame']
+            offset = frameNo - (poi['lastFrame'] - self.firstFrame)
             #print(offset)
             locs.append(poi['track'][offset])
         if len(locs) > 0:
@@ -70,7 +75,7 @@ class DataHandler(QtCore.QObject):
         frame = self.frames[frameNo]
         locs = []
         for poi in frame:
-            offset = frameNo - poi['lastFrame']
+            offset = frameNo - (poi['lastFrame'] - self.firstFrame)
             if(poi['pointclouds'][offset].size != 0):
                 locs.append(poi['pointclouds'][offset])
             # else:
@@ -182,7 +187,7 @@ class MyWidget(QtWidgets.QWidget):
 
         self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.slider.valueChanged.connect(lambda : self.visualizeFrame(self.slider.value()))
-        self.slider.setMaximum(self.datahandler.getFrames())
+        self.slider.setMaximum(self.datahandler.getFrames()-1)
 
         self.timer = QtCore.QTimer()
         self.timer.setInterval(100);
@@ -200,6 +205,9 @@ class MyWidget(QtWidgets.QWidget):
         self.controlLayout.addWidget(self.savebutton)
 
         self.layout.addLayout(self.controlLayout)
+
+        self.framecounter = QtWidgets.QLabel(f"0/{self.datahandler.getFrames()}")
+        self.layout.addWidget(self.framecounter)
 
         #predictor:
         self.model = load('randomForrest.joblib')
@@ -246,6 +254,7 @@ class MyWidget(QtWidgets.QWidget):
 
         colormap = [[1.0,0.0,0.0,0.8],[1.0,1.0,0.0,.8],[0.0,1.0,0.0,.8],[0.0,1.0,1.0,.8],[1.0,0.0,1.0,.8]]
 
+        self.framecounter.setText(f"{frame}/{self.datahandler.getFrames()}")
         # Targets
         # print(frame.clusters)
         pois = self.datahandler.getPOIs(frame)
@@ -272,6 +281,7 @@ class MyWidget(QtWidgets.QWidget):
         #print(y,x,pointclouds[:,3])
         poss = np.stack((x,y,vel+2.0),axis=1)
         self.pointcloud.setData(pos=poss)#, color=np.array(colors, dtype=np.float32))
+
         # except Exception as e:
         #     pass
 

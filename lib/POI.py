@@ -86,9 +86,18 @@ class POITracker(QtCore.QObject):
 
     def onArchive(self, poi):
         if len(poi.pointclouds) > 5:  # Require at least a few samples
+            #self.cleanup(poi)
             self.history.append(poi)
             self.savepoi(poi)
             print("archived a poi")
+
+    def cleanup(self, poi):
+        for i in range(0, -len(poi.pointclouds), -1):
+            if(poi.pointclouds[i].size > 0):
+                poi.pointclouds = poi.pointclouds[:i]
+                poi.track = poi.track[:i]
+                poi.lastframe += i
+
 
     def getLocations(self):
         locations = []
@@ -110,7 +119,6 @@ class POITracker(QtCore.QObject):
 
     def getPOIs(self):
         return self.activePOIs
-
 
 class Predictor(QtCore.QObject):
     newPrediction = QtCore.Signal(dict)

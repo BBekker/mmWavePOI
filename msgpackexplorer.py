@@ -15,10 +15,21 @@ def pol2cart(rho, phi):
     y = rho * np.sin(phi)
     return(x, y)
 
+def countPointclouds(pcs):
+    count = 0
+    for pc in pcs:
+        if(pc.size > 0):
+            count += 1
+    return count
+
 if __name__ == "__main__":
     msgpack_numpy.patch()
     xys = []
     all_pointclouds = []
+
+    angle=0.0
+
+    lengths = []
     with open(sys.argv[1], 'rb') as file:
         unpacker = msgpack.Unpacker(file, raw=False)
 
@@ -27,18 +38,26 @@ if __name__ == "__main__":
         for msg in unpacker:
             if(msg['class_id'] > -1):
                 pointclouds = msg['pointclouds']
-                for pointcloud in pointclouds:
-                    if (pointcloud.shape[0] > 1):
-                        if msg['class_id'] == 0:
-                            all_pointclouds.append(pointcloud)
 
-    averages = np.array([x.mean(axis=0) for x in all_pointclouds])
-    maxes = np.array([x.sum(axis=0) for x in all_pointclouds])
-    print(averages.shape)
-    plt.scatter(averages[:,0], maxes[:,3] / (1/(averages[:,0]/1300) +130))
 
-    x = np.linspace(5,50,100)
-    #plt.plot(x,1/(x/1300) +130)
-    plt.show()
+                if(countPointclouds(pointclouds) > 200):
+                    elevations = []
+                    distances = []
+                    for data in pointclouds:
+                        if data.size > 0:
+                            distance, elevation = pol2cart(data[:, 0], data[:, 4] + (3.1415 / 180 * angle))
+                            elevations += [np.percentile(elevation,95)]
+                            distances += [np.mean(distance)]
+
+                    #filteredclouds = [np.mean(x[:,3]) for x in pointclouds if x.size>1]
+                    plt.plot(distances,elevations)
+                    plt.show()
+
+
+    # plt.scatter(averages[:,0], maxes[:,3] / (1/(averages[:,0]/1300) +130))
+    #
+    # x = np.linspace(5,50,100)
+    # #plt.plot(x,1/(x/1300) +130)
+    # plt.show()
 
 
